@@ -6,7 +6,7 @@ Sqim is a permissionless Stellar/Soroban protocol for creating diversified on-ch
 
 Frontend:
 
-- https://sqim-protocol.vercel.app
+- https://sqim-protocol-stellar.vercel.app
 
 ## Overview
 
@@ -197,8 +197,30 @@ python -m http.server 4177 --directory site
 - slippage failure
 - stale oracle price failure without fallback quorum
 
+## Testnet Contracts
+
+Deployed on Stellar testnet under the `ayisha` development identity.
+
+| Contract | Testnet Contract ID | Explorer |
+| --- | --- | --- |
+| `factory` | `CA74FW7KGZQ2N7X3DO5CRDX7KMGX5LKA5GNIZ7WHX7ZFZAR54NI5MAXM` | [View](https://stellar.expert/explorer/testnet/contract/CA74FW7KGZQ2N7X3DO5CRDX7KMGX5LKA5GNIZ7WHX7ZFZAR54NI5MAXM) |
+| `basket` | `CC7XPFDPZEMRRHY3NJ7WPB5RDMWIXZMHNULKQALJGIWTXUXDK7JVPG4A` | [View](https://stellar.expert/explorer/testnet/contract/CC7XPFDPZEMRRHY3NJ7WPB5RDMWIXZMHNULKQALJGIWTXUXDK7JVPG4A) |
+| `basket_token` | `CD3V4GJ3QJPR6JAWEGJNAEGZ4JRLSGEWAMP2TZIYNO2JXMHTZNBBE3KL` | [View](https://stellar.expert/explorer/testnet/contract/CD3V4GJ3QJPR6JAWEGJNAEGZ4JRLSGEWAMP2TZIYNO2JXMHTZNBBE3KL) |
+| `settlement` | `CDJSQKCPKM5RACK2P5VHW4KC4AEIBO2SHKH5FOGR2YB2P2DBOIAS6D5A` | [View](https://stellar.expert/explorer/testnet/contract/CDJSQKCPKM5RACK2P5VHW4KC4AEIBO2SHKH5FOGR2YB2P2DBOIAS6D5A) |
+| `oracle_adapter` | `CDYAEPQS4ITHYNOSXZ4UIF2XX4HL6HOJBEO7TVFDUHJMVAOIBJ3CYP7C` | [View](https://stellar.expert/explorer/testnet/contract/CDYAEPQS4ITHYNOSXZ4UIF2XX4HL6HOJBEO7TVFDUHJMVAOIBJ3CYP7C) |
+
+WASM hashes:
+
+| Contract | WASM Hash |
+| --- | --- |
+| `factory` | `a89c74c49879941b7cd3d1dac1d2f57037e7de6174a2d91b6b5631f3da4589c6` |
+| `basket` | `6929446d0f76a62f578617a5fb0f2d4e65e8315093757d71de15a2d5acb5923d` |
+| `basket_token` | `06dc92eb01c63173dadcd2a9211b529446231993bfb589401b83f934b1ca089d` |
+| `settlement` | `8e7e3fcac382fb683dc07381cb99b59aba1a1de0634f6be4a9151eacebb309ed` |
+| `oracle_adapter` | `d328a7774ac82fc425f7d91336f899a4f4943bf6054936b751cdf570f9fdb160` |
+
 ## Deployment Notes
 
-The contracts have been tested on Stellar testnet. The current public branch avoids embedding personal local paths, local key aliases, or machine-specific data in the README.
+The contracts have been built, tested, and deployed on Stellar testnet. The public README intentionally includes only the Ayisha deployment identity, public contract IDs, and public explorer links.
 
 The frontend is configured for Vercel as a static site through `vercel.json`.
