@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sqim | Liquid on-chain baskets</title>
+    <meta
+      name="description"
+      content="Sqim is a permissionless Stellar protocol for liquid on-chain asset baskets."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Goudy+Bookletter+1911&family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="top">
+      <section class="stage" aria-labelledby="hero-title">
+        <div class="stage-frame">
+          <video class="hero-video" autoplay muted loop playsinline>
+            <source src="./assets/sqim-hero.mp4" type="video/mp4" />
+          </video>
+          <div class="video-glaze"></div>
+
+          <header class="hero-nav">
+            <a class="brand" href="#top" aria-label="Sqim home">
+              <span class="brand-mark">S</span>
+              <span>Sqim</span>
+            </a>
+            <nav class="nav-links" aria-label="Primary navigation">
+              <span>Ecosystem</span>
+              <span>Economics</span>
+              <span>Developers</span>
+              <button data-open-waitlist type="button">Governance</button>
+            </nav>
+            <button class="nav-cta" data-open-waitlist type="button" aria-label="Join Sqim waitlist">
+              <span aria-hidden="true">↗</span>
+              Waitlist
+            </button>
+          </header>
+
+          <div class="hero-copy">
+            <button class="pill" data-open-waitlist type="button">
+              <span aria-hidden="true">✦</span>
+              Basket Protocol
+            </button>
+            <h1 id="hero-title">Own Portfolios. Not Positions.</h1>
+            <p>
+              Diversified exposure wrapped into a single programmable asset.
+            </p>
+          </div>
+
+          <a class="community-card" href="https://x.com/sqim_protocol" target="_blank" rel="noreferrer">
+            <strong>Sqim</strong>
+            <span>protocol updates</span>
+            <em><span aria-hidden="true">↗</span> Join X</em>
+          </a>
+
+          <button class="documentation-card" data-open-waitlist type="button">
+            <span class="doc-icon" aria-hidden="true">↗</span>
+            <span>
+              <strong>I'm excited</strong>
+              <em>Documentation</em>
+            </span>
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <div class="modal-backdrop" data-modal hidden>
+      <section class="waitlist-modal" role="dialog" aria-modal="true" aria-labelledby="waitlist-title">
+        <button class="close-button" data-close-waitlist type="button" aria-label="Close waitlist form">×</button>
+        <span>Sqim waitlist</span>
+        <h2 id="waitlist-title">Get early access</h2>
+        <p>Drop your email and we’ll keep you close as baskets, routing, and public launch details go live.</p>
+        <form class="waitlist-form" data-waitlist-form>
+          <label for="email">Email</label>
+          <div class="form-row">
+            <input id="email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+            <button type="submit">Join</button>
+          </div>
+          <span class="form-status" data-form-status aria-live="polite"></span>
+        </form>
+      </section>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
