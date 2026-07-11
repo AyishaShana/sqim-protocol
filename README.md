@@ -25,6 +25,13 @@ Instead of users manually buying, tracking, and rebalancing many individual posi
 - `oracle_adapter` contract for primary oracle reads and M-of-N fallback pricing.
 - `settlement` contract boundary with oracle-based slippage checks.
 
+### Off-Chain Services
+
+- `services/indexer` polls Soroban RPC contract events and writes normalized basket activity into Postgres.
+- `services/api` exposes frontend REST reads from Postgres, with Redis used for hot-path NAV/AUM cache keys.
+- `services/relayer` runs reviewed rule-based rebalance strategies only, dry-run by default, and rejects live mode without an M-of-N signer quorum.
+- `docker-compose.yml` runs Postgres, Redis, indexer, API, and relayer for local development.
+
 ### Basket Mechanics
 
 - Creator-defined basket name, assets, and weights.
@@ -60,12 +67,10 @@ Instead of users manually buying, tracking, and rebalancing many individual posi
 
 ## What Is Pending
 
-### Production Rebalancer
+### Production Rebalancer Hardening
 
-The contract supports authorized rebalancers, but the off-chain/automation side still needs to be built:
+The v1 off-chain stack includes a lean rule-based relayer. Production hardening still needs:
 
-- strategy runner
-- scheduled rebalance bot
 - M-of-N signer coordination flow
 - monitoring for drift thresholds
 - transaction simulation before submission
@@ -119,7 +124,14 @@ site/
   app.js           waitlist modal behavior
   assets/          hero video
 
+services/
+  api/             REST API for frontend reads
+  indexer/         Soroban RPC event indexer
+  relayer/         reviewed rule-based rebalance process
+  db/schema.sql    Postgres schema
+
 vercel.json        static deployment routing
+docker-compose.yml local service stack
 ```
 
 ## Contract Crates
@@ -180,6 +192,37 @@ Preview frontend locally:
 
 ```powershell
 python -m http.server 4177 --directory site
+```
+
+Run the local off-chain stack:
+
+```powershell
+docker compose up --build
+```
+
+Switch RPC networks without code changes:
+
+```powershell
+$env:SOROBAN_RPC_URL="https://soroban-testnet.stellar.org"
+$env:SOROBAN_NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
+docker compose up --build
+```
+
+API examples:
+
+```powershell
+curl http://localhost:8080/health
+curl http://localhost:8080/baskets
+curl http://localhost:8080/baskets/<basket-contract-id>/history
+curl http://localhost:8080/baskets/<basket-contract-id>/metrics
+```
+
+Run the Postgres-backed integration test:
+
+```powershell
+cd services
+$env:SQIM_TEST_DATABASE_URL="postgres://sqim:sqim@localhost:5432/sqim?sslmode=disable"
+go test -tags=integration ./integration
 ```
 
 ## Tests Covered

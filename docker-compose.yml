@@ -1,0 +1,85 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sqim
+      POSTGRES_USER: sqim
+      POSTGRES_PASSWORD: sqim
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sqim -d sqim"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  indexer:
+    build:
+      context: ./services
+      dockerfile: Dockerfile
+      args:
+        SERVICE: indexer
+    environment:
+      DATABASE_URL: postgres://sqim:sqim@postgres:5432/sqim?sslmode=disable
+      SCHEMA_PATH: /app/db/schema.sql
+      SOROBAN_RPC_URL: ${SOROBAN_RPC_URL:-https://soroban-testnet.stellar.org}
+      SOROBAN_NETWORK_PASSPHRASE: ${SOROBAN_NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}
+      SQIM_CONTRACT_IDS: ${SQIM_CONTRACT_IDS:-CA74FW7KGZQ2N7X3DO5CRDX7KMGX5LKA5GNIZ7WHX7ZFZAR54NI5MAXM,CC7XPFDPZEMRRHY3NJ7WPB5RDMWIXZMHNULKQALJGIWTXUXDK7JVPG4A,CD3V4GJ3QJPR6JAWEGJNAEGZ4JRLSGEWAMP2TZIYNO2JXMHTZNBBE3KL,CDJSQKCPKM5RACK2P5VHW4KC4AEIBO2SHKH5FOGR2YB2P2DBOIAS6D5A,CDYAEPQS4ITHYNOSXZ4UIF2XX4HL6HOJBEO7TVFDUHJMVAOIBJ3CYP7C}
+      INDEXER_POLL_INTERVAL: ${INDEXER_POLL_INTERVAL:-8s}
+      INDEXER_START_LEDGER: ${INDEXER_START_LEDGER:-0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ./services
+      dockerfile: Dockerfile
+      args:
+        SERVICE: api
+    environment:
+      API_ADDR: :8080
+      DATABASE_URL: postgres://sqim:sqim@postgres:5432/sqim?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      SCHEMA_PATH: /app/db/schema.sql
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  relayer:
+    build:
+      context: ./services
+      dockerfile: Dockerfile
+      args:
+        SERVICE: relayer
+    environment:
+      DATABASE_URL: postgres://sqim:sqim@postgres:5432/sqim?sslmode=disable
+      SCHEMA_PATH: /app/db/schema.sql
+      SOROBAN_RPC_URL: ${SOROBAN_RPC_URL:-https://soroban-testnet.stellar.org}
+      SOROBAN_NETWORK_PASSPHRASE: ${SOROBAN_NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}
+      RELAYER_DRY_RUN: ${RELAYER_DRY_RUN:-true}
+      RELAYER_REBALANCER_QUORUM: ${RELAYER_REBALANCER_QUORUM:-2}
+      RELAYER_REBALANCER_SIGNERS: ${RELAYER_REBALANCER_SIGNERS:-}
+      RELAYER_INTERVAL: ${RELAYER_INTERVAL:-60s}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
