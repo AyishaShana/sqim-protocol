@@ -38,6 +38,7 @@ pub trait BasketContract {
         rebalancers: Vec<Address>,
         rebalancer_threshold: u32,
         max_drift_bps: u32,
+        max_transaction_amount: i128,
     );
 }
 
@@ -58,6 +59,7 @@ pub enum DataKey {
     Initialized,
     Oracle,
     MaxDriftBps,
+    MaxTransactionAmount,
     Rebalancers,
     RebalancerThreshold,
     Settlement,
@@ -84,6 +86,7 @@ impl Factory {
         rebalancers: Vec<Address>,
         rebalancer_threshold: u32,
         max_drift_bps: u32,
+        max_transaction_amount: i128,
     ) {
         if env.storage().instance().has(&DataKey::Initialized) {
             panic!("factory already initialized");
@@ -93,6 +96,9 @@ impl Factory {
         }
         if max_drift_bps > 10_000 {
             panic!("basket max drift exceeds 100 percent");
+        }
+        if max_transaction_amount < 0 {
+            panic!("basket max transaction amount must not be negative");
         }
         validate_rebalancer_quorum(&rebalancers, rebalancer_threshold);
         admin.require_auth();
@@ -126,6 +132,9 @@ impl Factory {
         env.storage()
             .instance()
             .set(&DataKey::MaxDriftBps, &max_drift_bps);
+        env.storage()
+            .instance()
+            .set(&DataKey::MaxTransactionAmount, &max_transaction_amount);
         env.storage().instance().set(&DataKey::BasketCount, &0_u32);
         env.storage().instance().set(&DataKey::Initialized, &true);
     }
@@ -181,6 +190,7 @@ impl Factory {
             &read_rebalancers(&env),
             &read_rebalancer_threshold(&env),
             &read_max_drift_bps(&env),
+            &read_max_transaction_amount(&env),
         );
 
         let spec = BasketSpec {
@@ -278,6 +288,13 @@ fn read_rebalancer_threshold(env: &Env) -> u32 {
 
 fn read_max_drift_bps(env: &Env) -> u32 {
     env.storage().instance().get(&DataKey::MaxDriftBps).unwrap()
+}
+
+fn read_max_transaction_amount(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get(&DataKey::MaxTransactionAmount)
+        .unwrap_or(0)
 }
 
 fn validate_weights(assets: &Vec<Asset>, weights: &Vec<u32>) {

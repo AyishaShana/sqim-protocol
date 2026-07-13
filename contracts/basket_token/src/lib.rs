@@ -139,8 +139,12 @@ impl BasketToken {
         let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
         admin.require_auth();
 
-        write_balance(&env, &to, read_balance(&env, &to) + amount);
-        write_total_supply(&env, read_total_supply(&env) + amount);
+        write_balance(
+            &env,
+            &to,
+            read_balance(&env, &to).checked_add(amount).unwrap(),
+        );
+        write_total_supply(&env, read_total_supply(&env).checked_add(amount).unwrap());
         env.events().publish((symbol_short!("mint"), to), amount);
     }
 }
@@ -191,7 +195,7 @@ fn spend_balance(env: &Env, id: &Address, amount: i128) {
 
 fn move_balance(env: &Env, from: &Address, to: &Address, amount: i128) {
     spend_balance(env, from, amount);
-    write_balance(env, to, read_balance(env, to) + amount);
+    write_balance(env, to, read_balance(env, to).checked_add(amount).unwrap());
 }
 
 fn spend_allowance(env: &Env, from: &Address, spender: &Address, amount: i128) {

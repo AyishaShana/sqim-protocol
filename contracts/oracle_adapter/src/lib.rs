@@ -4,6 +4,8 @@ use soroban_sdk::{
     contract, contractclient, contractimpl, contracttype, symbol_short, Address, Env, Symbol, Vec,
 };
 
+const ADMIN_TIMELOCK_SECONDS: u64 = 86_400;
+
 #[derive(Clone)]
 #[contracttype]
 pub struct Price {
@@ -26,6 +28,14 @@ pub struct ReflectorPriceData {
     pub timestamp: u64,
 }
 
+#[derive(Clone)]
+#[contracttype]
+pub struct TimelockedFallbackConfig {
+    pub signers: Vec<Address>,
+    pub threshold: u32,
+    pub execute_after: u64,
+}
+
 #[contractclient(name = "ReflectorPulseClient")]
 pub trait ReflectorPulse {
     fn decimals(env: Env) -> u32;
@@ -41,6 +51,7 @@ pub enum DataKey {
     FallbackThreshold,
     Initialized,
     MaxAgeSeconds,
+    PendingFallbackConfig,
     PrimaryAsset(Address),
     PrimaryEnabled,
     PrimaryOracle,
@@ -109,6 +120,47 @@ impl OracleAdapter {
         env.storage()
             .instance()
             .set(&DataKey::PrimaryEnabled, &enabled);
+    }
+
+    pub fn schedule_fallback_config(
+        env: Env,
+        admin: Address,
+        signers: Vec<Address>,
+        threshold: u32,
+    ) -> u64 {
+        validate_quorum(&signers, threshold);
+        require_admin(&env, &admin);
+        let execute_after = timelock_ready_at(&env);
+        env.storage().instance().set(
+            &DataKey::PendingFallbackConfig,
+            &TimelockedFallbackConfig {
+                signers,
+                threshold,
+                execute_after,
+            },
+        );
+        execute_after
+    }
+
+    pub fn execute_fallback_config(env: Env, admin: Address) {
+        require_admin(&env, &admin);
+        let pending: TimelockedFallbackConfig = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingFallbackConfig)
+            .unwrap();
+        if env.ledger().timestamp() < pending.execute_after {
+            panic!("oracle adapter admin timelock not ready");
+        }
+        env.storage()
+            .instance()
+            .set(&DataKey::FallbackSigners, &pending.signers);
+        env.storage()
+            .instance()
+            .set(&DataKey::FallbackThreshold, &pending.threshold);
+        env.storage()
+            .instance()
+            .remove(&DataKey::PendingFallbackConfig);
     }
 
     pub fn set_fallback_price(
@@ -197,6 +249,13 @@ fn require_admin(env: &Env, admin: &Address) {
         panic!("oracle adapter admin mismatch");
     }
     admin.require_auth();
+}
+
+fn timelock_ready_at(env: &Env) -> u64 {
+    env.ledger()
+        .timestamp()
+        .checked_add(ADMIN_TIMELOCK_SECONDS)
+        .unwrap()
 }
 
 fn fallback_price(env: &Env, asset: &Address) -> Option<Price> {
@@ -334,5 +393,96 @@ mod test {
             &vec![&env, signer_a, signer_b],
         );
         client.price(&asset);
+    }
+
+    #[test]
+    #[should_panic]
+    fn fallback_price_requires_on_chain_quorum() {
+        let env = Env::default();
+        env.mock_all_auths();
+        env.ledger().set_timestamp(1_000);
+
+        let admin = Address::generate(&env);
+        let signer_a = Address::generate(&env);
+        let signer_b = Address::generate(&env);
+        let asset = Address::generate(&env);
+        let oracle_id = env.register(OracleAdapter, ());
+        let client = OracleAdapterClient::new(&env, &oracle_id);
+
+        client.initialize(
+            &admin,
+            &Address::generate(&env),
+            &false,
+            &60_u64,
+            &vec![&env, signer_a.clone(), signer_b],
+            &2_u32,
+        );
+
+        client.set_fallback_price(&asset, &10_000_000_i128, &1_000_u64, &vec![&env, signer_a]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn fallback_config_change_cannot_execute_before_timelock() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let signer_a = Address::generate(&env);
+        let signer_b = Address::generate(&env);
+        let oracle_id = env.register(OracleAdapter, ());
+        let client = OracleAdapterClient::new(&env, &oracle_id);
+
+        client.initialize(
+            &admin,
+            &Address::generate(&env),
+            &false,
+            &60_u64,
+            &vec![&env, signer_a.clone(), signer_b.clone()],
+            &2_u32,
+        );
+
+        client.schedule_fallback_config(&admin, &vec![&env, signer_a, signer_b], &2_u32);
+        client.execute_fallback_config(&admin);
+    }
+
+    #[test]
+    fn fallback_config_change_executes_after_timelock() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let old_signer_a = Address::generate(&env);
+        let old_signer_b = Address::generate(&env);
+        let new_signer_a = Address::generate(&env);
+        let new_signer_b = Address::generate(&env);
+        let asset = Address::generate(&env);
+        let oracle_id = env.register(OracleAdapter, ());
+        let client = OracleAdapterClient::new(&env, &oracle_id);
+
+        client.initialize(
+            &admin,
+            &Address::generate(&env),
+            &false,
+            &60_u64,
+            &vec![&env, old_signer_a, old_signer_b],
+            &2_u32,
+        );
+
+        let ready_at = client.schedule_fallback_config(
+            &admin,
+            &vec![&env, new_signer_a.clone(), new_signer_b.clone()],
+            &2_u32,
+        );
+        env.ledger().set_timestamp(ready_at);
+        client.execute_fallback_config(&admin);
+        client.set_fallback_price(
+            &asset,
+            &10_000_000_i128,
+            &ready_at,
+            &vec![&env, new_signer_a, new_signer_b],
+        );
+
+        assert_eq!(client.price(&asset).price_e7, 10_000_000_i128);
     }
 }

@@ -6,6 +6,7 @@ use soroban_sdk::{
 
 const BPS_DENOMINATOR: i128 = 10_000;
 const PRICE_SCALE: i128 = 10_000_000;
+const ADMIN_TIMELOCK_SECONDS: u64 = 86_400;
 
 #[derive(Clone)]
 #[contracttype]
@@ -19,6 +20,13 @@ pub struct Price {
     pub asset: Address,
     pub price_e7: i128,
     pub updated_at: u64,
+}
+
+#[derive(Clone)]
+#[contracttype]
+pub struct TimelockedU32 {
+    pub value: u32,
+    pub execute_after: u64,
 }
 
 #[contractclient(name = "OracleAdapterClient")]
@@ -45,6 +53,7 @@ pub enum DataKey {
     Initialized,
     MaxSlippageBps,
     Oracle,
+    PendingMaxSlippageBps,
     Router,
     SimulatedSlippageBps,
 }
@@ -93,6 +102,40 @@ impl Settlement {
         env.storage()
             .instance()
             .set(&DataKey::SimulatedSlippageBps, &slippage_bps);
+    }
+
+    pub fn schedule_max_slippage_bps(env: Env, admin: Address, max_slippage_bps: u32) -> u64 {
+        if max_slippage_bps > 10_000 {
+            panic!("slippage cap exceeds 100 percent");
+        }
+        require_admin(&env, &admin);
+        let execute_after = timelock_ready_at(&env);
+        env.storage().instance().set(
+            &DataKey::PendingMaxSlippageBps,
+            &TimelockedU32 {
+                value: max_slippage_bps,
+                execute_after,
+            },
+        );
+        execute_after
+    }
+
+    pub fn execute_max_slippage_bps(env: Env, admin: Address) {
+        require_admin(&env, &admin);
+        let pending: TimelockedU32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingMaxSlippageBps)
+            .unwrap();
+        if env.ledger().timestamp() < pending.execute_after {
+            panic!("settlement admin timelock not ready");
+        }
+        env.storage()
+            .instance()
+            .set(&DataKey::MaxSlippageBps, &pending.value);
+        env.storage()
+            .instance()
+            .remove(&DataKey::PendingMaxSlippageBps);
     }
 
     pub fn swap(
@@ -250,6 +293,21 @@ fn read_slippage_cap(env: &Env) -> u32 {
         .unwrap()
 }
 
+fn require_admin(env: &Env, admin: &Address) {
+    let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+    if *admin != stored_admin {
+        panic!("only settlement admin can perform admin action");
+    }
+    admin.require_auth();
+}
+
+fn timelock_ready_at(env: &Env) -> u64 {
+    env.ledger()
+        .timestamp()
+        .checked_add(ADMIN_TIMELOCK_SECONDS)
+        .unwrap()
+}
+
 fn read_oracle(env: &Env) -> Address {
     env.storage().instance().get(&DataKey::Oracle).unwrap()
 }
@@ -315,5 +373,51 @@ fn validate_weights(assets: &Vec<Asset>, weights: &Vec<u32>) {
     }
     if total != 10_000 {
         panic!("basket weights must total 10000 bps");
+    }
+}
+
+#[cfg(test)]
+mod test {
+    extern crate std;
+
+    use super::*;
+    use oracle_adapter::OracleAdapter;
+    use soroban_sdk::{
+        testutils::{Address as _, Ledger},
+        Env,
+    };
+
+    fn setup() -> (Env, Address, Address) {
+        let env = Env::default();
+        env.mock_all_auths();
+        let admin = Address::generate(&env);
+        let router = Address::generate(&env);
+        let oracle = env.register(OracleAdapter, ());
+        let settlement = env.register(Settlement, ());
+        let client = SettlementClient::new(&env, &settlement);
+        client.initialize(&admin, &router, &oracle, &500_u32);
+        (env, admin, settlement)
+    }
+
+    #[test]
+    #[should_panic]
+    fn slippage_cap_change_cannot_execute_before_timelock() {
+        let (env, admin, settlement) = setup();
+        let client = SettlementClient::new(&env, &settlement);
+
+        client.schedule_max_slippage_bps(&admin, &250_u32);
+        client.execute_max_slippage_bps(&admin);
+    }
+
+    #[test]
+    fn slippage_cap_change_executes_after_timelock() {
+        let (env, admin, settlement) = setup();
+        let client = SettlementClient::new(&env, &settlement);
+
+        let ready_at = client.schedule_max_slippage_bps(&admin, &250_u32);
+        env.ledger().set_timestamp(ready_at);
+        client.execute_max_slippage_bps(&admin);
+
+        assert_eq!(client.max_slippage_bps(), 250_u32);
     }
 }

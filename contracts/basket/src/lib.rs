@@ -9,6 +9,7 @@ use soroban_sdk::{
 
 const BPS_DENOMINATOR: i128 = 10_000;
 const NAV_SCALE: i128 = 10_000_000;
+const ADMIN_TIMELOCK_SECONDS: u64 = 86_400;
 
 #[derive(Clone)]
 #[contracttype]
@@ -21,6 +22,28 @@ pub struct Asset {
 pub struct Position {
     pub tracked_shares: i128,
     pub average_cost_per_share: i128,
+}
+
+#[derive(Clone)]
+#[contracttype]
+pub struct TimelockedU32 {
+    pub value: u32,
+    pub execute_after: u64,
+}
+
+#[derive(Clone)]
+#[contracttype]
+pub struct TimelockedI128 {
+    pub value: i128,
+    pub execute_after: u64,
+}
+
+#[derive(Clone)]
+#[contracttype]
+pub struct TimelockedRebalancers {
+    pub rebalancers: Vec<Address>,
+    pub threshold: u32,
+    pub execute_after: u64,
 }
 
 #[contractclient(name = "BasketShareTokenClient")]
@@ -85,6 +108,12 @@ pub enum DataKey {
     Oracle,
     Position(Address),
     MaxDriftBps,
+    MaxTransactionAmount,
+    Paused,
+    PendingMaxDriftBps,
+    PendingMaxTransactionAmount,
+    PendingRebalancers,
+    PendingWithdrawalFeeBps,
     Rebalancers,
     RebalancerThreshold,
     Settlement,
@@ -113,6 +142,7 @@ impl Basket {
         rebalancers: Vec<Address>,
         rebalancer_threshold: u32,
         max_drift_bps: u32,
+        max_transaction_amount: i128,
     ) {
         if env.storage().instance().has(&DataKey::Initialized) {
             panic!("basket already initialized");
@@ -125,6 +155,7 @@ impl Basket {
         if max_drift_bps > 10_000 {
             panic!("basket max drift exceeds 100 percent");
         }
+        check_nonnegative(max_transaction_amount);
         validate_rebalancer_quorum(&rebalancers, rebalancer_threshold);
 
         env.storage().instance().set(&DataKey::Admin, &admin);
@@ -157,7 +188,11 @@ impl Basket {
             .set(&DataKey::MaxDriftBps, &max_drift_bps);
         env.storage()
             .instance()
+            .set(&DataKey::MaxTransactionAmount, &max_transaction_amount);
+        env.storage()
+            .instance()
             .set(&DataKey::TotalBasketValue, &0_i128);
+        env.storage().instance().set(&DataKey::Paused, &false);
         env.storage().instance().set(&DataKey::Initialized, &true);
     }
 
@@ -184,6 +219,22 @@ impl Basket {
         read_total_value(&env)
     }
 
+    pub fn paused(env: Env) -> bool {
+        is_paused(&env)
+    }
+
+    pub fn max_transaction_amount(env: Env) -> i128 {
+        read_max_transaction_amount(&env)
+    }
+
+    pub fn withdrawal_fee_bps(env: Env) -> u32 {
+        read_withdrawal_fee_bps(&env)
+    }
+
+    pub fn max_drift_bps(env: Env) -> u32 {
+        read_max_drift_bps(&env)
+    }
+
     pub fn nav(env: Env) -> i128 {
         nav(&env)
     }
@@ -201,16 +252,160 @@ impl Basket {
 
     pub fn mark_to_market(env: Env, admin: Address, total_basket_value: i128) {
         check_nonnegative(total_basket_value);
-        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
-        if admin != stored_admin {
-            panic!("only basket creator can mark basket value");
-        }
-        admin.require_auth();
+        require_admin(&env, &admin);
         write_total_value(&env, total_basket_value);
     }
 
+    pub fn pause(env: Env, admin: Address) {
+        require_admin(&env, &admin);
+        env.storage().instance().set(&DataKey::Paused, &true);
+        env.events().publish((symbol_short!("pause"), admin), true);
+    }
+
+    pub fn unpause(env: Env, admin: Address) {
+        require_admin(&env, &admin);
+        env.storage().instance().set(&DataKey::Paused, &false);
+        env.events()
+            .publish((symbol_short!("unpause"), admin), false);
+    }
+
+    pub fn schedule_withdrawal_fee_bps(env: Env, admin: Address, value: u32) -> u64 {
+        if value > 10_000 {
+            panic!("basket withdrawal fee exceeds 100 percent");
+        }
+        require_admin(&env, &admin);
+        let execute_after = timelock_ready_at(&env);
+        env.storage().instance().set(
+            &DataKey::PendingWithdrawalFeeBps,
+            &TimelockedU32 {
+                value,
+                execute_after,
+            },
+        );
+        execute_after
+    }
+
+    pub fn execute_withdrawal_fee_bps(env: Env, admin: Address) {
+        require_admin(&env, &admin);
+        let pending: TimelockedU32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingWithdrawalFeeBps)
+            .unwrap();
+        require_timelock_ready(&env, pending.execute_after);
+        env.storage()
+            .instance()
+            .set(&DataKey::WithdrawalFeeBps, &pending.value);
+        env.storage()
+            .instance()
+            .remove(&DataKey::PendingWithdrawalFeeBps);
+    }
+
+    pub fn schedule_max_drift_bps(env: Env, admin: Address, value: u32) -> u64 {
+        if value > 10_000 {
+            panic!("basket max drift exceeds 100 percent");
+        }
+        require_admin(&env, &admin);
+        let execute_after = timelock_ready_at(&env);
+        env.storage().instance().set(
+            &DataKey::PendingMaxDriftBps,
+            &TimelockedU32 {
+                value,
+                execute_after,
+            },
+        );
+        execute_after
+    }
+
+    pub fn execute_max_drift_bps(env: Env, admin: Address) {
+        require_admin(&env, &admin);
+        let pending: TimelockedU32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingMaxDriftBps)
+            .unwrap();
+        require_timelock_ready(&env, pending.execute_after);
+        env.storage()
+            .instance()
+            .set(&DataKey::MaxDriftBps, &pending.value);
+        env.storage()
+            .instance()
+            .remove(&DataKey::PendingMaxDriftBps);
+    }
+
+    pub fn schedule_rebalancers(
+        env: Env,
+        admin: Address,
+        rebalancers: Vec<Address>,
+        threshold: u32,
+    ) -> u64 {
+        validate_rebalancer_quorum(&rebalancers, threshold);
+        require_admin(&env, &admin);
+        let execute_after = timelock_ready_at(&env);
+        env.storage().instance().set(
+            &DataKey::PendingRebalancers,
+            &TimelockedRebalancers {
+                rebalancers,
+                threshold,
+                execute_after,
+            },
+        );
+        execute_after
+    }
+
+    pub fn execute_rebalancers(env: Env, admin: Address) {
+        require_admin(&env, &admin);
+        let pending: TimelockedRebalancers = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingRebalancers)
+            .unwrap();
+        require_timelock_ready(&env, pending.execute_after);
+        env.storage()
+            .instance()
+            .set(&DataKey::Rebalancers, &pending.rebalancers);
+        env.storage()
+            .instance()
+            .set(&DataKey::RebalancerThreshold, &pending.threshold);
+        env.storage()
+            .instance()
+            .remove(&DataKey::PendingRebalancers);
+    }
+
+    pub fn schedule_max_transaction_amount(env: Env, admin: Address, value: i128) -> u64 {
+        check_nonnegative(value);
+        require_admin(&env, &admin);
+        let execute_after = timelock_ready_at(&env);
+        env.storage().instance().set(
+            &DataKey::PendingMaxTransactionAmount,
+            &TimelockedI128 {
+                value,
+                execute_after,
+            },
+        );
+        execute_after
+    }
+
+    pub fn execute_max_transaction_amount(env: Env, admin: Address) {
+        require_admin(&env, &admin);
+        let pending: TimelockedI128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingMaxTransactionAmount)
+            .unwrap();
+        require_timelock_ready(&env, pending.execute_after);
+        env.storage()
+            .instance()
+            .set(&DataKey::MaxTransactionAmount, &pending.value);
+        env.storage()
+            .instance()
+            .remove(&DataKey::PendingMaxTransactionAmount);
+    }
+
     pub fn deposit(env: Env, depositor: Address, amount: i128) -> i128 {
+        ensure_not_paused(&env);
         check_positive(amount);
+        enforce_max_transaction_amount(&env, amount);
         depositor.require_auth();
 
         let current_nav = nav(&env);
@@ -260,7 +455,7 @@ impl Basket {
         BasketShareTokenClient::new(&env, &share_token).mint(&depositor, &shares_to_mint);
 
         add_position(&env, &depositor, shares_to_mint, current_nav);
-        write_total_value(&env, read_total_value(&env) + amount);
+        write_total_value(&env, read_total_value(&env).checked_add(amount).unwrap());
 
         env.events().publish(
             (symbol_short!("deposit"), depositor, deposit_asset),
@@ -270,6 +465,7 @@ impl Basket {
     }
 
     pub fn withdraw(env: Env, holder: Address, basket_token_amount: i128) -> i128 {
+        ensure_not_paused(&env);
         check_positive(basket_token_amount);
         holder.require_auth();
 
@@ -285,6 +481,7 @@ impl Basket {
         let current_nav = nav(&env);
         let gross_value = basket_token_amount.checked_mul(current_nav).unwrap() / NAV_SCALE;
         check_positive(gross_value);
+        enforce_max_transaction_amount(&env, gross_value);
 
         let assets = read_assets(&env);
         let redeemed_amounts =
@@ -351,6 +548,7 @@ impl Basket {
         new_weights_bps: Vec<u32>,
         rebalancer_signers: Vec<Address>,
     ) -> Vec<i128> {
+        ensure_not_paused(&env);
         let assets = read_assets(&env);
         validate_weights(&assets, &new_weights_bps);
         authorize_rebalance(&env, &caller, &rebalancer_signers);
@@ -365,6 +563,13 @@ impl Basket {
         let deposit_asset = read_deposit_asset(&env);
         let new_holdings =
             target_holdings(&env, &assets, &deposit_asset, total_value, &new_weights_bps);
+        enforce_rebalance_transaction_amount(
+            &env,
+            &assets,
+            &deposit_asset,
+            &old_holdings,
+            &new_holdings,
+        );
         let settlement = read_settlement(&env);
         let basket_address = env.current_contract_address();
 
@@ -476,6 +681,20 @@ fn read_max_drift_bps(env: &Env) -> u32 {
     env.storage().instance().get(&DataKey::MaxDriftBps).unwrap()
 }
 
+fn read_max_transaction_amount(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get(&DataKey::MaxTransactionAmount)
+        .unwrap_or(0)
+}
+
+fn read_withdrawal_fee_bps(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&DataKey::WithdrawalFeeBps)
+        .unwrap()
+}
+
 fn read_deposit_asset(env: &Env) -> Address {
     env.storage()
         .instance()
@@ -503,6 +722,7 @@ fn read_total_value(env: &Env) -> i128 {
 }
 
 fn write_total_value(env: &Env, value: i128) {
+    check_nonnegative(value);
     env.storage()
         .instance()
         .set(&DataKey::TotalBasketValue, &value);
@@ -515,6 +735,47 @@ fn nav(env: &Env) -> i128 {
         NAV_SCALE
     } else {
         read_total_value(env).checked_mul(NAV_SCALE).unwrap() / supply
+    }
+}
+
+fn is_paused(env: &Env) -> bool {
+    env.storage()
+        .instance()
+        .get(&DataKey::Paused)
+        .unwrap_or(false)
+}
+
+fn ensure_not_paused(env: &Env) {
+    if is_paused(env) {
+        panic!("basket is paused");
+    }
+}
+
+fn require_admin(env: &Env, admin: &Address) {
+    let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+    if *admin != stored_admin {
+        panic!("only basket creator can perform admin action");
+    }
+    admin.require_auth();
+}
+
+fn timelock_ready_at(env: &Env) -> u64 {
+    env.ledger()
+        .timestamp()
+        .checked_add(ADMIN_TIMELOCK_SECONDS)
+        .unwrap()
+}
+
+fn require_timelock_ready(env: &Env, execute_after: u64) {
+    if env.ledger().timestamp() < execute_after {
+        panic!("basket admin timelock not ready");
+    }
+}
+
+fn enforce_max_transaction_amount(env: &Env, value: i128) {
+    let max = read_max_transaction_amount(env);
+    if max > 0 && value > max {
+        panic!("basket transaction exceeds max size");
     }
 }
 
@@ -590,6 +851,44 @@ fn target_holdings(
         holdings.push_back(target_amount);
     }
     holdings
+}
+
+fn enforce_rebalance_transaction_amount(
+    env: &Env,
+    assets: &Vec<Asset>,
+    deposit_asset: &Address,
+    old_holdings: &Vec<i128>,
+    new_holdings: &Vec<i128>,
+) {
+    let max = read_max_transaction_amount(env);
+    if max == 0 {
+        return;
+    }
+
+    let oracle = read_oracle(env);
+    let deposit_price = OracleAdapterClient::new(env, &oracle)
+        .price(deposit_asset)
+        .price_e7;
+    let mut moved_value = 0_i128;
+    for i in 0..assets.len() {
+        let old_amount = old_holdings.get_unchecked(i);
+        let new_amount = new_holdings.get_unchecked(i);
+        let delta = if old_amount > new_amount {
+            old_amount - new_amount
+        } else {
+            new_amount - old_amount
+        };
+        if delta == 0 {
+            continue;
+        }
+        let asset = assets.get_unchecked(i).address;
+        let asset_price = OracleAdapterClient::new(env, &oracle)
+            .price(&asset)
+            .price_e7;
+        let base_value = delta.checked_mul(asset_price).unwrap() / deposit_price;
+        moved_value = moved_value.checked_add(base_value).unwrap();
+    }
+    enforce_max_transaction_amount(env, moved_value);
 }
 
 fn authorize_rebalance(env: &Env, caller: &Address, signers: &Vec<Address>) {
@@ -681,12 +980,13 @@ fn add_position(env: &Env, holder: &Address, shares: i128, cost_per_share: i128)
         tracked_shares: 0,
         average_cost_per_share: cost_per_share,
     });
-    let new_shares = current.tracked_shares + shares;
+    let new_shares = current.tracked_shares.checked_add(shares).unwrap();
     let weighted_cost = current
         .average_cost_per_share
         .checked_mul(current.tracked_shares)
         .unwrap()
-        + cost_per_share.checked_mul(shares).unwrap();
+        .checked_add(cost_per_share.checked_mul(shares).unwrap())
+        .unwrap();
     write_position(
         env,
         holder,
@@ -717,11 +1017,7 @@ fn withdrawal_fee(
     realized_value: i128,
     fallback_cost_per_share: i128,
 ) -> i128 {
-    let fee_bps: u32 = env
-        .storage()
-        .instance()
-        .get(&DataKey::WithdrawalFeeBps)
-        .unwrap();
+    let fee_bps = read_withdrawal_fee_bps(env);
     let position = read_position(env, holder).unwrap_or(Position {
         tracked_shares: 0,
         average_cost_per_share: fallback_cost_per_share,
@@ -780,7 +1076,7 @@ mod test {
     use oracle_adapter::{OracleAdapter, OracleAdapterClient};
     use settlement::Settlement as SettlementContract;
     use soroban_sdk::{
-        testutils::Address as _,
+        testutils::{Address as _, Ledger},
         token::{StellarAssetClient, TokenClient},
         vec, Env, MuxedAddress, String,
     };
@@ -907,6 +1203,7 @@ mod test {
             &vec![&env, rebalancer_a.clone(), rebalancer_b.clone()],
             &2_u32,
             &2_000_u32,
+            &(500 * UNIT),
         );
 
         let fixture = Fixture {
@@ -1147,5 +1444,182 @@ mod test {
             .set_simulated_slippage_bps(&fixture.creator, &600_u32);
 
         fixture.basket().deposit(&fixture.depositor, &(100 * UNIT));
+    }
+
+    #[test]
+    #[should_panic]
+    fn pause_halts_deposit() {
+        let fixture = setup();
+        fixture.basket().pause(&fixture.creator);
+
+        fixture.basket().deposit(&fixture.depositor, &(10 * UNIT));
+    }
+
+    #[test]
+    #[should_panic]
+    fn pause_halts_withdraw() {
+        let fixture = setup();
+        fixture.basket().deposit(&fixture.depositor, &(100 * UNIT));
+        fixture.basket().pause(&fixture.creator);
+
+        fixture.basket().withdraw(&fixture.depositor, &(10 * UNIT));
+    }
+
+    #[test]
+    #[should_panic]
+    fn pause_halts_rebalance() {
+        let fixture = setup();
+        fixture.basket().deposit(&fixture.depositor, &(100 * UNIT));
+        fixture.basket().pause(&fixture.creator);
+
+        fixture.basket().rebalance(
+            &fixture.rebalancer_a,
+            &vec![&fixture.env, 5_000_u32, 5_000_u32],
+            &vec![
+                &fixture.env,
+                fixture.rebalancer_a.clone(),
+                fixture.rebalancer_b.clone(),
+            ],
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn withdrawal_fee_change_cannot_execute_before_timelock() {
+        let fixture = setup();
+
+        fixture
+            .basket()
+            .schedule_withdrawal_fee_bps(&fixture.creator, &500_u32);
+        fixture
+            .basket()
+            .execute_withdrawal_fee_bps(&fixture.creator);
+    }
+
+    #[test]
+    fn withdrawal_fee_change_executes_after_timelock() {
+        let fixture = setup();
+
+        let ready_at = fixture
+            .basket()
+            .schedule_withdrawal_fee_bps(&fixture.creator, &500_u32);
+        fixture.env.ledger().set_timestamp(ready_at);
+        fixture
+            .basket()
+            .execute_withdrawal_fee_bps(&fixture.creator);
+
+        assert_eq!(fixture.basket().withdrawal_fee_bps(), 500_u32);
+    }
+
+    #[test]
+    #[should_panic]
+    fn max_transaction_size_blocks_large_deposit() {
+        let fixture = setup();
+
+        fixture.basket().deposit(&fixture.depositor, &(600 * UNIT));
+    }
+
+    #[test]
+    #[should_panic]
+    fn max_transaction_size_blocks_large_withdrawal() {
+        let fixture = setup();
+        fixture.basket().deposit(&fixture.depositor, &(100 * UNIT));
+        let ready_at = fixture
+            .basket()
+            .schedule_max_transaction_amount(&fixture.creator, &(50 * UNIT));
+        fixture.env.ledger().set_timestamp(ready_at);
+        fixture
+            .basket()
+            .execute_max_transaction_amount(&fixture.creator);
+
+        fixture.basket().withdraw(&fixture.depositor, &(60 * UNIT));
+    }
+
+    #[test]
+    #[should_panic]
+    fn max_transaction_size_blocks_large_rebalance() {
+        let fixture = setup();
+        fixture.basket().deposit(&fixture.depositor, &(100 * UNIT));
+        let ready_at = fixture
+            .basket()
+            .schedule_max_transaction_amount(&fixture.creator, &(10 * UNIT));
+        fixture.env.ledger().set_timestamp(ready_at);
+        fixture
+            .basket()
+            .execute_max_transaction_amount(&fixture.creator);
+
+        fixture.basket().rebalance(
+            &fixture.rebalancer_a,
+            &vec![&fixture.env, 5_000_u32, 5_000_u32],
+            &vec![
+                &fixture.env,
+                fixture.rebalancer_a.clone(),
+                fixture.rebalancer_b.clone(),
+            ],
+        );
+    }
+
+    #[test]
+    fn rebalancer_set_change_executes_only_after_timelock() {
+        let fixture = setup();
+        let new_rebalancer_a = Address::generate(&fixture.env);
+        let new_rebalancer_b = Address::generate(&fixture.env);
+
+        let ready_at = fixture.basket().schedule_rebalancers(
+            &fixture.creator,
+            &vec![
+                &fixture.env,
+                new_rebalancer_a.clone(),
+                new_rebalancer_b.clone(),
+            ],
+            &2_u32,
+        );
+        fixture.env.ledger().set_timestamp(ready_at);
+        fixture.basket().execute_rebalancers(&fixture.creator);
+        fixture.set_price(&fixture.deposit_asset, UNIT);
+        for asset in fixture.assets.iter() {
+            fixture.set_price(&asset.address, UNIT);
+        }
+
+        fixture.basket().deposit(&fixture.depositor, &(100 * UNIT));
+        fixture.basket().rebalance(
+            &new_rebalancer_a,
+            &vec![&fixture.env, 5_000_u32, 5_000_u32],
+            &vec![
+                &fixture.env,
+                new_rebalancer_a.clone(),
+                new_rebalancer_b.clone(),
+            ],
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn withdraw_swap_fails_if_slippage_exceeds_tolerance() {
+        let fixture = setup();
+        fixture.basket().deposit(&fixture.depositor, &(100 * UNIT));
+        settlement::SettlementClient::new(&fixture.env, &fixture.settlement_id)
+            .set_simulated_slippage_bps(&fixture.creator, &600_u32);
+
+        fixture.basket().withdraw(&fixture.depositor, &(10 * UNIT));
+    }
+
+    #[test]
+    #[should_panic]
+    fn rebalance_swap_fails_if_slippage_exceeds_tolerance() {
+        let fixture = setup();
+        fixture.basket().deposit(&fixture.depositor, &(100 * UNIT));
+        settlement::SettlementClient::new(&fixture.env, &fixture.settlement_id)
+            .set_simulated_slippage_bps(&fixture.creator, &600_u32);
+
+        fixture.basket().rebalance(
+            &fixture.rebalancer_a,
+            &vec![&fixture.env, 5_000_u32, 5_000_u32],
+            &vec![
+                &fixture.env,
+                fixture.rebalancer_a.clone(),
+                fixture.rebalancer_b.clone(),
+            ],
+        );
     }
 }

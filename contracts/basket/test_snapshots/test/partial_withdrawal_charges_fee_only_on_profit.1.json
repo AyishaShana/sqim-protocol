@@ -182,6 +182,9 @@
                 },
                 {
                   "u32": 2000
+                },
+                {
+                  "i128": "5000000000"
                 }
               ]
             }
@@ -1123,6 +1126,18 @@
                       "key": {
                         "vec": [
                           {
+                            "symbol": "MaxTransactionAmount"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "i128": "5000000000"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
                             "symbol": "Name"
                           }
                         ]
@@ -1141,6 +1156,18 @@
                       },
                       "val": {
                         "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2ZMN"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "Paused"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "bool": false
                       }
                     },
                     {
