@@ -1,13 +1,6 @@
 {
+  "buildCommand": "npm --prefix site run build",
+  "outputDirectory": "site/dist",
   "cleanUrls": true,
-  "rewrites": [
-    {
-      "source": "/assets/(.*)",
-      "destination": "/site/assets/$1"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/site/$1"
-    }
-  ]
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

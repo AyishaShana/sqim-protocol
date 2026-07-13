@@ -58,12 +58,11 @@ Instead of users manually buying, tracking, and rebalancing many individual posi
 
 ### Frontend
 
-- Premium static landing page.
-- Video-backed hero card.
-- Sqim positioning copy.
-- Join X CTA.
-- Waitlist modal.
-- Static Vercel routing config.
+- React + TypeScript app for basket discovery, deposit, withdraw, portfolio, and creator workflows.
+- Freighter wallet integration for client-side signing.
+- Basket explorer backed by the API service, not direct chain polling for basket lists or history.
+- UI copy centered on diversified exposure and one-token basket ownership.
+- Static Vercel routing config for the built app.
 
 ## What Is Pending
 
@@ -119,9 +118,9 @@ contracts/
   settlement/      settlement boundary and slippage checks
 
 site/
-  index.html       landing page
-  styles.css       visual design
-  app.js           waitlist modal behavior
+  src/             React + TypeScript frontend
+  assets/          hero and product media
+  package.json     frontend scripts and wallet dependencies
   assets/          hero video
 
 services/
@@ -191,8 +190,23 @@ stellar contract build
 Preview frontend locally:
 
 ```powershell
-python -m http.server 4177 --directory site
+npm install --prefix site
+npm run dev
 ```
+
+Frontend environment:
+
+```powershell
+$env:VITE_SQIM_API_URL="http://localhost:8080"
+$env:VITE_SOROBAN_RPC_URL="https://soroban-testnet.stellar.org"
+$env:VITE_SOROBAN_NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
+```
+
+Wallet support:
+
+- v1 ships with Freighter signing through `@stellar/freighter-api`.
+- Stellar Wallets Kit is the planned abstraction for additional wallets such as xBull, Albedo, Hana, Lobstr through WalletConnect, Rabet, Ledger, and Trezor.
+- The frontend never handles private keys. It builds transactions, sends XDR to the connected wallet, and submits only signed transactions.
 
 Run the local off-chain stack:
 
