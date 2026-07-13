@@ -194,10 +194,17 @@ npm install --prefix site
 npm run dev
 ```
 
+Preview the frontend on port `8080` with the lightweight mock API on `8081`:
+
+```powershell
+npm --prefix site run mock-api
+npm --prefix site run dev:8080
+```
+
 Frontend environment:
 
 ```powershell
-$env:VITE_SQIM_API_URL="http://localhost:8080"
+$env:VITE_SQIM_API_URL="http://localhost:8081"
 $env:VITE_SOROBAN_RPC_URL="https://soroban-testnet.stellar.org"
 $env:VITE_SOROBAN_NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
 ```
@@ -225,10 +232,10 @@ docker compose up --build
 API examples:
 
 ```powershell
-curl http://localhost:8080/health
-curl http://localhost:8080/baskets
-curl http://localhost:8080/baskets/<basket-contract-id>/history
-curl http://localhost:8080/baskets/<basket-contract-id>/metrics
+curl http://localhost:8081/health
+curl http://localhost:8081/baskets
+curl http://localhost:8081/baskets/<basket-contract-id>/history
+curl http://localhost:8081/baskets/<basket-contract-id>/metrics
 ```
 
 Run the Postgres-backed integration test:

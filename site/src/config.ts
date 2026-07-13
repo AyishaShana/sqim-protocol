@@ -1,4 +1,4 @@
-export const API_URL = import.meta.env.VITE_SQIM_API_URL ?? "http://localhost:8080";
+export const API_URL = import.meta.env.VITE_SQIM_API_URL ?? "http://localhost:8081";
 export const RPC_URL = import.meta.env.VITE_SOROBAN_RPC_URL ?? "https://soroban-testnet.stellar.org";
 export const NETWORK_PASSPHRASE =
   import.meta.env.VITE_SOROBAN_NETWORK_PASSPHRASE ?? "Test SDF Network ; September 2015";

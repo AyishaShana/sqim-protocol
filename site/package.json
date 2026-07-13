@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 4177",
+    "dev:8080": "vite --host 127.0.0.1 --port 8080",
+    "mock-api": "node scripts/mock-api.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4177"
   },
