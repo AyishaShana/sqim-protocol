@@ -22,12 +22,13 @@ The frontend, mock API, and hardened contracts build and pass local smoke checks
 
 Before any mainnet launch, Sqim still needs an external professional smart-contract audit, real Soroswap settlement integration, real testnet liquidity validation, typed event cleanup, and repeatable deployment scripts. See `THREATS.md` for the current risk register.
 
-Latest local verification on July 13, 2026:
+Latest verification on July 13, 2026:
 
-- Stellar CLI `23.1.4` installed, with the `testnet` network profile available.
+- Stellar CLI `27.0.0` verified from `~/.cargo/bin/stellar.exe`, with the `testnet` network profile available. The older Program Files CLI on this Windows machine is `23.1.4` and cannot parse the current hardened basket/factory WASM specs.
 - Frontend route smoke passed on `http://localhost:8080`.
 - API route smoke passed on `http://localhost:8081`.
 - Frontend tests, production build, Soroban contract tests, and release WASM build passed.
+- Fresh hardened contracts deployed on Stellar testnet and manually exercised through deposit, external basket-token transfer, and third-party withdrawal.
 - Go service tests and Docker Compose validation require Go and Docker to be installed in the local environment.
 
 ## What Is Done
@@ -122,7 +123,7 @@ The current settlement crate is a guarded simulation boundary. The next step is 
 - Add more integration tests around multi-asset deposits and withdrawals.
 - Add fuzz/property tests for weight and cost-basis math.
 - Add deployment scripts for repeatable testnet/mainnet releases.
-- Run a fresh hardened-contract deployment on testnet after deployment scripts are added.
+- Convert the manual hardened testnet deployment flow into a repeatable deployment script.
 
 ## Repository Layout
 
@@ -303,15 +304,24 @@ go test -tags=integration ./integration
 
 ## Testnet Contracts
 
-Legacy preview contracts deployed on Stellar testnet under the `ayisha` development identity. These links are useful for testnet discovery and frontend preview data, but they predate the latest hardening pass. The current hardened WASM build hashes are listed below and should be redeployed to fresh testnet contract IDs through a repeatable deployment script before any public testnet deposit flow is enabled.
+Fresh hardened preview contracts deployed on Stellar testnet under the `ayisha` development identity on July 13, 2026. This is still a testnet preview, not a mainnet launch approval.
 
 | Contract | Testnet Contract ID | Explorer |
 | --- | --- | --- |
-| `factory` | `CA74FW7KGZQ2N7X3DO5CRDX7KMGX5LKA5GNIZ7WHX7ZFZAR54NI5MAXM` | [View](https://stellar.expert/explorer/testnet/contract/CA74FW7KGZQ2N7X3DO5CRDX7KMGX5LKA5GNIZ7WHX7ZFZAR54NI5MAXM) |
-| `basket` | `CC7XPFDPZEMRRHY3NJ7WPB5RDMWIXZMHNULKQALJGIWTXUXDK7JVPG4A` | [View](https://stellar.expert/explorer/testnet/contract/CC7XPFDPZEMRRHY3NJ7WPB5RDMWIXZMHNULKQALJGIWTXUXDK7JVPG4A) |
-| `basket_token` | `CD3V4GJ3QJPR6JAWEGJNAEGZ4JRLSGEWAMP2TZIYNO2JXMHTZNBBE3KL` | [View](https://stellar.expert/explorer/testnet/contract/CD3V4GJ3QJPR6JAWEGJNAEGZ4JRLSGEWAMP2TZIYNO2JXMHTZNBBE3KL) |
-| `settlement` | `CDJSQKCPKM5RACK2P5VHW4KC4AEIBO2SHKH5FOGR2YB2P2DBOIAS6D5A` | [View](https://stellar.expert/explorer/testnet/contract/CDJSQKCPKM5RACK2P5VHW4KC4AEIBO2SHKH5FOGR2YB2P2DBOIAS6D5A) |
-| `oracle_adapter` | `CDYAEPQS4ITHYNOSXZ4UIF2XX4HL6HOJBEO7TVFDUHJMVAOIBJ3CYP7C` | [View](https://stellar.expert/explorer/testnet/contract/CDYAEPQS4ITHYNOSXZ4UIF2XX4HL6HOJBEO7TVFDUHJMVAOIBJ3CYP7C) |
+| `factory` | `CBYWTMUFK6DXO4CN4QZASWXAK7BXGJLPWDQNA3CNBOMRCX7GUGTNNKPZ` | [View](https://stellar.expert/explorer/testnet/contract/CBYWTMUFK6DXO4CN4QZASWXAK7BXGJLPWDQNA3CNBOMRCX7GUGTNNKPZ) |
+| `basket` | `CABCGGFYGPWYNRPJIXFN6YHGER7YHY4CH4GWHQZUHAFEO7A6EJNS64VZ` | [View](https://stellar.expert/explorer/testnet/contract/CABCGGFYGPWYNRPJIXFN6YHGER7YHY4CH4GWHQZUHAFEO7A6EJNS64VZ) |
+| `basket_token` | `CARGKEM34YZ4DCNMSSLMOPMIAAJGAF5CKGAAMJWV7E2AI5QFFGPGYEBM` | [View](https://stellar.expert/explorer/testnet/contract/CARGKEM34YZ4DCNMSSLMOPMIAAJGAF5CKGAAMJWV7E2AI5QFFGPGYEBM) |
+| `settlement` | `CDNKWO64BEB4GJ4EAVSIHE3IVCGYI25UZK6DYD3CGSSRJBJGN63N3K7U` | [View](https://stellar.expert/explorer/testnet/contract/CDNKWO64BEB4GJ4EAVSIHE3IVCGYI25UZK6DYD3CGSSRJBJGN63N3K7U) |
+| `oracle_adapter` | `CDMZIC6FKPT6B6LYPAZVXBV2COP5BZSAM4VIIY67OGGGVPNBW7QWAKNR` | [View](https://stellar.expert/explorer/testnet/contract/CDMZIC6FKPT6B6LYPAZVXBV2COP5BZSAM4VIIY67OGGGVPNBW7QWAKNR) |
+| `mock_deposit_asset` | `CASNUWD2Z4RCUUY4LZEO7XRKHGMNRR55K7BMMUUH6PVIMYZF4IMU5RS4` | [View](https://stellar.expert/explorer/testnet/contract/CASNUWD2Z4RCUUY4LZEO7XRKHGMNRR55K7BMMUUH6PVIMYZF4IMU5RS4) |
+
+Manual testnet proof:
+
+| Flow | Result | Transaction |
+| --- | --- | --- |
+| Deposit `10000000` mock asset into basket | Minted `10000000` basket tokens | [View](https://stellar.expert/explorer/testnet/tx/b608fa1aedef563e71f9ec49d3a101f2f62341c9b80bc22dc368ebfb6c893af7) |
+| Transfer `4000000` basket tokens to third party | Transfer event emitted by basket token | [View](https://stellar.expert/explorer/testnet/tx/b8d55581d89f658ccc9b0c9542ef9c318e8e792ffc91f65beb28f5757eb05636) |
+| Withdraw `2000000` basket tokens from third-party holder | Returned `2000000` mock asset, fee `0` | [View](https://stellar.expert/explorer/testnet/tx/cdb90bc129705eeedbac3979768273f3a308f6ae2d103d2ac5ae332db97d1aed) |
 
 Current hardened local WASM hashes:
 

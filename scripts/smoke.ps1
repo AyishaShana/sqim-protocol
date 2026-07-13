@@ -34,6 +34,16 @@ try {
     Step "Repository cleanliness"
     git status --short
 
+    Step "Stellar CLI"
+    $cargoStellar = Join-Path $env:USERPROFILE ".cargo\bin\stellar.exe"
+    $stellar = if (Test-Path $cargoStellar) { $cargoStellar } else { "stellar" }
+    & $stellar --version
+    $networks = & $stellar network ls
+    if ($networks -notcontains "testnet") {
+        throw "Stellar CLI testnet network profile is missing"
+    }
+    Write-Host "OK Stellar testnet profile"
+
     Step "Frontend and API routes"
     Check-Http "$FrontendUrl/" | Out-Null
     Check-Http "$ApiUrl/health" | Out-Null
