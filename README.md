@@ -14,6 +14,22 @@ Sqim turns a basket of assets into a single programmable on-chain asset.
 
 Instead of users manually buying, tracking, and rebalancing many individual positions, a Sqim basket wraps diversified exposure into one transferable basket token. The token is designed to be composable from day one: it can move between wallets and, later, through Soroban DEX/AMM infrastructure.
 
+## Production Readiness
+
+Current status: **testnet preview, not mainnet production**.
+
+The frontend, mock API, and hardened contracts build and pass local smoke checks. The current contracts include pause controls, timelocked sensitive admin changes, max transaction-size guards, M-of-N fallback oracle enforcement, M-of-N rebalancer enforcement, and slippage checks across deposit, withdraw, and rebalance paths.
+
+Before any mainnet launch, Sqim still needs an external professional smart-contract audit, real Soroswap settlement integration, real testnet liquidity validation, typed event cleanup, and repeatable deployment scripts. See `THREATS.md` for the current risk register.
+
+Latest local verification on July 13, 2026:
+
+- Stellar CLI `23.1.4` installed, with the `testnet` network profile available.
+- Frontend route smoke passed on `http://localhost:8080`.
+- API route smoke passed on `http://localhost:8081`.
+- Frontend tests, production build, Soroban contract tests, and release WASM build passed.
+- Go service tests and Docker Compose validation require Go and Docker to be installed in the local environment.
+
 ## What Is Done
 
 ### Smart Contracts
@@ -106,6 +122,7 @@ The current settlement crate is a guarded simulation boundary. The next step is 
 - Add more integration tests around multi-asset deposits and withdrawals.
 - Add fuzz/property tests for weight and cost-basis math.
 - Add deployment scripts for repeatable testnet/mainnet releases.
+- Run a fresh hardened-contract deployment on testnet after deployment scripts are added.
 
 ## Repository Layout
 
@@ -223,6 +240,20 @@ Run the local off-chain stack:
 docker compose up --build
 ```
 
+Run the local smoke suite:
+
+```powershell
+npm run smoke
+```
+
+The smoke script checks:
+
+- frontend route on `http://localhost:8080`
+- mock/API routes on `http://localhost:8081`
+- frontend tests and production build
+- Soroban contract tests and WASM build
+- optional Go and Docker checks when those tools are installed
+
 Switch RPC networks without code changes:
 
 ```powershell
@@ -262,10 +293,17 @@ go test -tags=integration ./integration
 - max-drift rebalance failure
 - slippage failure
 - stale oracle price failure without fallback quorum
+- pause blocking deposit, withdraw, and rebalance
+- timelocked withdrawal-fee and rebalancer-set changes
+- max transaction-size guards
+- withdrawal and rebalance slippage guard regressions
+- timelocked settlement slippage-cap changes
+- timelocked oracle fallback signer/quorum changes
+- on-chain fallback oracle quorum enforcement
 
 ## Testnet Contracts
 
-Deployed on Stellar testnet under the `ayisha` development identity.
+Legacy preview contracts deployed on Stellar testnet under the `ayisha` development identity. These links are useful for testnet discovery and frontend preview data, but they predate the latest hardening pass. The current hardened WASM build hashes are listed below and should be redeployed to fresh testnet contract IDs through a repeatable deployment script before any public testnet deposit flow is enabled.
 
 | Contract | Testnet Contract ID | Explorer |
 | --- | --- | --- |
@@ -275,18 +313,18 @@ Deployed on Stellar testnet under the `ayisha` development identity.
 | `settlement` | `CDJSQKCPKM5RACK2P5VHW4KC4AEIBO2SHKH5FOGR2YB2P2DBOIAS6D5A` | [View](https://stellar.expert/explorer/testnet/contract/CDJSQKCPKM5RACK2P5VHW4KC4AEIBO2SHKH5FOGR2YB2P2DBOIAS6D5A) |
 | `oracle_adapter` | `CDYAEPQS4ITHYNOSXZ4UIF2XX4HL6HOJBEO7TVFDUHJMVAOIBJ3CYP7C` | [View](https://stellar.expert/explorer/testnet/contract/CDYAEPQS4ITHYNOSXZ4UIF2XX4HL6HOJBEO7TVFDUHJMVAOIBJ3CYP7C) |
 
-WASM hashes:
+Current hardened local WASM hashes:
 
 | Contract | WASM Hash |
 | --- | --- |
-| `factory` | `a89c74c49879941b7cd3d1dac1d2f57037e7de6174a2d91b6b5631f3da4589c6` |
-| `basket` | `6929446d0f76a62f578617a5fb0f2d4e65e8315093757d71de15a2d5acb5923d` |
-| `basket_token` | `06dc92eb01c63173dadcd2a9211b529446231993bfb589401b83f934b1ca089d` |
-| `settlement` | `8e7e3fcac382fb683dc07381cb99b59aba1a1de0634f6be4a9151eacebb309ed` |
-| `oracle_adapter` | `d328a7774ac82fc425f7d91336f899a4f4943bf6054936b751cdf570f9fdb160` |
+| `factory` | `57b6a0771da160747c4ba8182354b69701b1bcb820188320cfc45902678ca213` |
+| `basket` | `7bb0afef51a8410ede6f9f3c241521abf2ff5e1f358ba9ecfd6ef2a2e23bfc43` |
+| `basket_token` | `3aecf7efc53ac4098af30e06d96c6583dc5584983526358473e89a6e1c4cd08d` |
+| `settlement` | `569ff92714f3c8dec30305f5c1a287c7ddab73d82998294a1eb0be1c095582fc` |
+| `oracle_adapter` | `ac24d7a2d51562f8b0f3e1af9100566ddd2bbb5b182e193f161ae6c224aaabcd` |
 
 ## Deployment Notes
 
-The contracts have been built, tested, and deployed on Stellar testnet. The public README intentionally includes only the Ayisha deployment identity, public contract IDs, and public explorer links.
+The contracts have been built and tested locally against the testnet-oriented configuration. Do not treat the legacy preview contract IDs as production-safe hardened deployments. Mainnet deployment is intentionally out of scope until audit completion.
 
 The frontend is configured for Vercel as a static site through `vercel.json`.

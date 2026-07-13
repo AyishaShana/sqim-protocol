@@ -2,6 +2,7 @@
   "scripts": {
     "dev": "npm --prefix site run dev",
     "build": "npm --prefix site run build",
-    "preview": "npm --prefix site run preview"
+    "preview": "npm --prefix site run preview",
+    "smoke": "powershell -ExecutionPolicy Bypass -File scripts/smoke.ps1"
   }
 }
