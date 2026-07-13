@@ -12,6 +12,8 @@ export type Basket = {
   assets: BasketAsset[] | unknown;
   weights_bps: number[] | unknown;
   strategy?: unknown;
+  investable?: boolean;
+  preview_only?: boolean;
   created_at?: string;
 };
 

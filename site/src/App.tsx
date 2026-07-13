@@ -9,7 +9,14 @@ import {
   ShieldCheck,
   Sparkles
 } from "lucide-react";
-import { API_URL, FACTORY_CONTRACT_ID, NETWORK_PASSPHRASE, RPC_URL } from "./config";
+import {
+  API_URL,
+  ENABLE_CONTRACT_WRITES,
+  FACTORY_CONTRACT_ID,
+  INVESTABLE_BASKET_IDS,
+  NETWORK_PASSPHRASE,
+  RPC_URL
+} from "./config";
 import { fetchBasketHistory, fetchBaskets, fetchMetrics, fallbackBaskets } from "./lib/api";
 import { compactAddress, formatNumber, formatPercent, formatToken, toNumber } from "./lib/format";
 import { positionFromHistory, previewWithdrawal } from "./lib/portfolio";
@@ -251,6 +258,7 @@ function DepositWithdrawPanel({
   const shares = nav > 0 ? amount / nav : 0;
   const position = positionFromHistory(basket, history, wallet.publicKey, nav);
   const withdrawPreview = previewWithdrawal(position, toNumber(burnShares), nav);
+  const canWrite = isInvestableBasket(basket);
 
   async function submitDeposit() {
     await submit("deposit", [addressArg(wallet.publicKey), i128Arg(amount)]);
@@ -261,6 +269,12 @@ function DepositWithdrawPanel({
   }
 
   async function submit(method: string, args: unknown[]) {
+    if (!canWrite) {
+      onNotice(
+        "This basket is a read-only preview. Configure VITE_SQIM_INVESTABLE_BASKET_IDS with a factory-created, initialized basket and set VITE_SQIM_ENABLE_CONTRACT_WRITES=true before submitting deposits or withdrawals."
+      );
+      return;
+    }
     if (!wallet.connected) {
       onNotice("Connect Freighter before signing. Sqim never touches private keys.");
       return;
@@ -287,8 +301,9 @@ function DepositWithdrawPanel({
           <input value={depositAmount} onChange={(event) => setDepositAmount(event.target.value)} inputMode="decimal" />
         </label>
         <PreviewLine label="Estimated basket tokens" value={formatToken(shares)} />
-        <button onClick={submitDeposit} disabled={submitting}>
-          Sign deposit
+        {!canWrite && <p className="read-only-note">Preview only: live deposits require an initialized basket.</p>}
+        <button onClick={submitDeposit} disabled={submitting || !canWrite}>
+          {canWrite ? "Sign deposit" : "Deposit disabled"}
         </button>
       </div>
       <div className="flow-card subtle">
@@ -301,8 +316,9 @@ function DepositWithdrawPanel({
         <PreviewLine label="Gross payout estimate" value={formatToken(toNumber(burnShares) * nav)} />
         <PreviewLine label="Profit-only fee estimate" value={formatToken(withdrawPreview.fee)} />
         <PreviewLine label="Estimated net payout" value={formatToken(withdrawPreview.net)} />
-        <button onClick={submitWithdraw} disabled={submitting}>
-          Sign withdraw
+        {!canWrite && <p className="read-only-note">Preview only: live withdrawals require an initialized basket.</p>}
+        <button onClick={submitWithdraw} disabled={submitting || !canWrite}>
+          {canWrite ? "Sign withdraw" : "Withdraw disabled"}
         </button>
       </div>
     </div>
@@ -400,6 +416,11 @@ function CreatorDashboard({
   const feeRevenue = 0;
 
   async function createBasket() {
+    if (!ENABLE_CONTRACT_WRITES) {
+      return onNotice(
+        "Contract writes are disabled for local preview. Set VITE_SQIM_ENABLE_CONTRACT_WRITES=true only after configuring initialized testnet contracts."
+      );
+    }
     if (!wallet.connected) return onNotice("Connect Freighter before creating a basket.");
     const assetAddresses = assetText.split(",").map((part) => part.trim()).filter(Boolean);
     const parsedWeights = weights.split(",").map((part) => Number(part.trim()));
@@ -417,6 +438,11 @@ function CreatorDashboard({
   }
 
   async function rebalance() {
+    if (!ENABLE_CONTRACT_WRITES || !isInvestableBasket({ basket_id: selectedBasket } as Basket)) {
+      return onNotice(
+        "Manual rebalance is disabled for preview baskets. Use a factory-created initialized basket and enable contract writes first."
+      );
+    }
     if (!wallet.connected) return onNotice("Connect Freighter before rebalancing.");
     const parsedWeights = rebalanceWeights.split(",").map((part) => Number(part.trim()));
     try {
@@ -521,6 +547,14 @@ function normalizedWeights(basket: Basket, assetCount: number): number[] {
     return basket.weights_bps.map(Number);
   }
   return Array.from({ length: assetCount }, (_, index) => (index === 0 ? 5000 : index === 1 ? 3000 : 2000));
+}
+
+function isInvestableBasket(basket: Basket) {
+  return (
+    ENABLE_CONTRACT_WRITES &&
+    basket.investable === true &&
+    INVESTABLE_BASKET_IDS.includes(basket.basket_id)
+  );
 }
 
 function titleFor(screen: Screen) {

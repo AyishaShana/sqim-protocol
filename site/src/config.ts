@@ -12,3 +12,8 @@ export const DEFAULT_BASKET_CONTRACT_ID =
   "CC7XPFDPZEMRRHY3NJ7WPB5RDMWIXZMHNULKQALJGIWTXUXDK7JVPG4A";
 
 export const WITHDRAWAL_FEE_BPS = Number(import.meta.env.VITE_WITHDRAWAL_FEE_BPS ?? "100");
+export const ENABLE_CONTRACT_WRITES = import.meta.env.VITE_SQIM_ENABLE_CONTRACT_WRITES === "true";
+export const INVESTABLE_BASKET_IDS = (import.meta.env.VITE_SQIM_INVESTABLE_BASKET_IDS ?? "")
+  .split(",")
+  .map((value: string) => value.trim())
+  .filter(Boolean);

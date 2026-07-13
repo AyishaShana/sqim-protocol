@@ -14,6 +14,8 @@ const basket = {
     { address: "test-btc", symbol: "BTC", name: "Testnet BTC" }
   ],
   weights_bps: [5000, 3000, 2000],
+  investable: false,
+  preview_only: true,
   created_at: new Date(Date.now() - 86_400_000).toISOString()
 };
 
