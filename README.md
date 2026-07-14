@@ -225,7 +225,10 @@ Frontend environment:
 $env:VITE_SQIM_API_URL="http://localhost:8081"
 $env:VITE_SOROBAN_RPC_URL="https://soroban-testnet.stellar.org"
 $env:VITE_SOROBAN_NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
-$env:VITE_SQIM_ENABLE_CONTRACT_WRITES="false"
+$env:VITE_SQIM_FACTORY_CONTRACT_ID="CBYWTMUFK6DXO4CN4QZASWXAK7BXGJLPWDQNA3CNBOMRCX7GUGTNNKPZ"
+$env:VITE_SQIM_DEFAULT_BASKET_ID="CABCGGFYGPWYNRPJIXFN6YHGER7YHY4CH4GWHQZUHAFEO7A6EJNS64VZ"
+$env:VITE_SQIM_INVESTABLE_BASKET_IDS="CABCGGFYGPWYNRPJIXFN6YHGER7YHY4CH4GWHQZUHAFEO7A6EJNS64VZ"
+$env:VITE_SQIM_ENABLE_CONTRACT_WRITES="true"
 ```
 
 Wallet support:
@@ -233,7 +236,7 @@ Wallet support:
 - v1 ships with Freighter signing through `@stellar/freighter-api`.
 - Stellar Wallets Kit is the planned abstraction for additional wallets such as xBull, Albedo, Hana, Lobstr through WalletConnect, Rabet, Ledger, and Trezor.
 - The frontend never handles private keys. It builds transactions, sends XDR to the connected wallet, and submits only signed transactions.
-- Local preview baskets are read-only by default. Enable writes only after the API returns a factory-created initialized basket with `investable: true`, and set `VITE_SQIM_INVESTABLE_BASKET_IDS` plus `VITE_SQIM_ENABLE_CONTRACT_WRITES=true`.
+- Local testing defaults point at the factory-created initialized testnet basket. Keep writes on testnet only, with `VITE_SQIM_INVESTABLE_BASKET_IDS` and `VITE_SQIM_ENABLE_CONTRACT_WRITES=true`.
 
 Run the local off-chain stack:
 

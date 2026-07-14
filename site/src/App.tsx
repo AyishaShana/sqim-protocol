@@ -409,9 +409,9 @@ function CreatorDashboard({
   onNotice: (message: string) => void;
 }) {
   const [name, setName] = useState("Balanced Testnet Basket");
-  const [assetText, setAssetText] = useState("native, test-usdc, test-btc");
-  const [weights, setWeights] = useState("5000,3000,2000");
-  const [rebalanceWeights, setRebalanceWeights] = useState("4500,3500,2000");
+  const [assetText, setAssetText] = useState("CASNUWD2Z4RCUUY4LZEO7XRKHGMNRR55K7BMMUUH6PVIMYZF4IMU5RS4");
+  const [weights, setWeights] = useState("10000");
+  const [rebalanceWeights, setRebalanceWeights] = useState("10000");
   const [selectedBasket, setSelectedBasket] = useState(baskets[0]?.basket_id ?? "");
   const feeRevenue = 0;
 

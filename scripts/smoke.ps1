@@ -1,7 +1,7 @@
 param(
     [string]$FrontendUrl = "http://localhost:8080",
     [string]$ApiUrl = "http://localhost:8081",
-    [string]$BasketId = "CC7XPFDPZEMRRHY3NJ7WPB5RDMWIXZMHNULKQALJGIWTXUXDK7JVPG4A",
+    [string]$BasketId = "CABCGGFYGPWYNRPJIXFN6YHGER7YHY4CH4GWHQZUHAFEO7A6EJNS64VZ",
     [switch]$SkipBuild
 )
 

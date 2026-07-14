@@ -5,15 +5,17 @@ const fallbackBasket: Basket = {
   basket_id: DEFAULT_BASKET_CONTRACT_ID,
   creator: "ayisha",
   name: "Sqim Testnet Basket",
-  share_token_id: "",
+  share_token_id: "CARGKEM34YZ4DCNMSSLMOPMIAAJGAF5CKGAAMJWV7E2AI5QFFGPGYEBM",
   assets: [
-    { address: "native", symbol: "XLM", name: "Stellar Lumens" },
-    { address: "test-usdc", symbol: "USDC", name: "Testnet USDC" },
-    { address: "test-btc", symbol: "BTC", name: "Testnet BTC" }
+    {
+      address: "CASNUWD2Z4RCUUY4LZEO7XRKHGMNRR55K7BMMUUH6PVIMYZF4IMU5RS4",
+      symbol: "SQTA",
+      name: "Sqim Test Asset"
+    }
   ],
-  weights_bps: [5000, 3000, 2000],
-  investable: false,
-  preview_only: true,
+  weights_bps: [10000],
+  investable: true,
+  preview_only: false,
   created_at: new Date().toISOString()
 };
 

@@ -1,21 +1,23 @@
 import http from "node:http";
 
 const port = Number(process.env.SQIM_MOCK_API_PORT ?? "8081");
-const basketId = "CC7XPFDPZEMRRHY3NJ7WPB5RDMWIXZMHNULKQALJGIWTXUXDK7JVPG4A";
+const basketId = "CABCGGFYGPWYNRPJIXFN6YHGER7YHY4CH4GWHQZUHAFEO7A6EJNS64VZ";
 
 const basket = {
   basket_id: basketId,
   creator: "ayisha",
   name: "Sqim Testnet Basket",
-  share_token_id: "CD3V4GJ3QJPR6JAWEGJNAEGZ4JRLSGEWAMP2TZIYNO2JXMHTZNBBE3KL",
+  share_token_id: "CARGKEM34YZ4DCNMSSLMOPMIAAJGAF5CKGAAMJWV7E2AI5QFFGPGYEBM",
   assets: [
-    { address: "native", symbol: "XLM", name: "Stellar Lumens" },
-    { address: "test-usdc", symbol: "USDC", name: "Testnet USDC" },
-    { address: "test-btc", symbol: "BTC", name: "Testnet BTC" }
+    {
+      address: "CASNUWD2Z4RCUUY4LZEO7XRKHGMNRR55K7BMMUUH6PVIMYZF4IMU5RS4",
+      symbol: "SQTA",
+      name: "Sqim Test Asset"
+    }
   ],
-  weights_bps: [5000, 3000, 2000],
-  investable: false,
-  preview_only: true,
+  weights_bps: [10000],
+  investable: true,
+  preview_only: false,
   created_at: new Date(Date.now() - 86_400_000).toISOString()
 };
 
