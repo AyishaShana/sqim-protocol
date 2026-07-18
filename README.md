@@ -1,343 +1,253 @@
-# Sqim Protocol
+# Sqim
 
 **Own Portfolios. Not Positions.**
 
-Sqim is a permissionless Stellar/Soroban protocol for creating diversified on-chain asset baskets. A user deposits once and receives a single liquid basket token that represents proportional exposure to a curated set of underlying assets.
+Sqim is a permissionless Stellar protocol for diversified on-chain asset baskets. A user deposits once and receives one liquid, transferable token representing proportional exposure to a creator-defined set of assets.
 
-Frontend:
+> **TESTNET ONLY**
+>
+> This repository and its deployed contracts use valueless test assets. Sqim is unaudited, is not approved for mainnet, and must not receive real funds.
 
-- https://sqim-protocol-stellar.vercel.app
+| Resource | Link |
+| --- | --- |
+| Public testnet app | [sqim-protocol-stellar-sigma.vercel.app](https://sqim-protocol-stellar-sigma.vercel.app) |
+| Active contracts | [DEPLOYMENTS.md](DEPLOYMENTS.md) |
+| Final verification | [SMOKE_TEST_REPORT.md](SMOKE_TEST_REPORT.md) |
+| Readiness verdict | [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) |
+| Threat model | [THREATS.md](THREATS.md) |
+| Pool evidence | [POOLS.md](POOLS.md) |
 
-## Overview
+## Status
 
-Sqim turns a basket of assets into a single programmable on-chain asset.
+**Testnet production deployment: NOT READY.** The contracts and public read-only application are live, but real Freighter browser evidence, Docker/Postgres integration evidence, public backend hosting, GitHub CI confirmation, and an independent audit remain open. The exact blockers are maintained in [`PRODUCTION_READINESS.md`](PRODUCTION_READINESS.md).
 
-Instead of users manually buying, tracking, and rebalancing many individual positions, a Sqim basket wraps diversified exposure into one transferable basket token. The token is designed to be composable from day one: it can move between wallets and, later, through Soroban DEX/AMM infrastructure.
+## What is implemented
 
-## Production Readiness
+### Basket protocol
 
-Current status: **testnet preview, not mainnet production**.
+- Creator-defined basket names, asset sets, target weights, fees, drift limits, transaction limits, and rebalancer quorum.
+- Factory deployment of one basket contract and one transferable SEP-41-style basket token per basket.
+- Read-only NAV and AUM views based on oracle-valued constituent balances.
+- Deposits that mint shares at current NAV and route capital into target constituents.
+- Withdrawals that burn shares, unwind proportional constituents, and charge creator fees only on realized profit.
+- Per-holder weighted average cost basis, including basis movement when basket tokens transfer.
+- Creator or on-chain M-of-N rebalancer authorization.
+- Pausing, max transaction size, bounded per-call drift, and timelocked risk-setting changes.
+- Typed contract errors and typed events across basket, token, factory, settlement, and oracle contracts.
 
-The frontend, mock API, and hardened contracts build and pass local smoke checks. The current contracts include pause controls, timelocked sensitive admin changes, max transaction-size guards, M-of-N fallback oracle enforcement, M-of-N rebalancer enforcement, and slippage checks across deposit, withdraw, and rebalance paths.
+### Real settlement
 
-Before any mainnet launch, Sqim still needs an external professional smart-contract audit, real Soroswap settlement integration, real testnet liquidity validation, typed event cleanup, and repeatable deployment scripts. See `THREATS.md` for the current risk register.
+- Soroswap testnet router integration with single-hop and configured multi-hop routes.
+- Exact-in execution for deposit and rebalance paths.
+- Exact-out execution for withdrawal requirements.
+- Oracle-relative minimum/maximum amounts on every trade path.
+- Downstream router rejection mapped to typed Sqim errors without a silent simulation fallback.
+- Testnet XLM/WETH, XLM/WBTC, and XLM/WSOL pools documented in [`POOLS.md`](POOLS.md).
 
-Latest verification on July 13, 2026:
+### Oracle model
 
-- Stellar CLI `27.0.0` verified from `~/.cargo/bin/stellar.exe`, with the `testnet` network profile available. The older Program Files CLI on this Windows machine is `23.1.4` and cannot parse the current hardened basket/factory WASM specs.
-- Frontend route smoke passed on `http://localhost:8080`.
-- API route smoke passed on `http://localhost:8081`.
-- Frontend tests, production build, Soroban contract tests, and release WASM build passed.
-- Fresh hardened contracts deployed on Stellar testnet and manually exercised through deposit, external basket-token transfer, and third-party withdrawal.
-- Go service tests and Docker Compose validation require Go and Docker to be installed in the local environment.
+- Reflector testnet oracle as the primary source.
+- Configured maximum price age and explicit stale/missing-price failure.
+- On-chain fallback submissions requiring M-of-N authorized signatures.
+- No single fallback key can publish a valid price unilaterally.
 
-## What Is Done
+### Off-chain stack
 
-### Smart Contracts
+- Go indexer for factory, deposit, withdrawal, transfer, and rebalance events.
+- Postgres tables for basket configuration, events, NAV history, creator profiles, and preferences.
+- Go REST API for discovery, details, portfolios, profiles, historical series, and backtests.
+- Redis cache for current NAV/AUM, including `as_of_ledger`, timestamp, and source metadata.
+- Rule-based relayer supporting calendar and drift strategies through an M-of-N signer set.
+- Historical data/backtesting service with Parquet-oriented storage and explicit simulated-data labels.
+- Fixture-ID guards that reject test basket patterns in non-test database state.
 
-- Rust/Soroban Cargo workspace.
-- `basket_token` contract for transferable basket shares.
-- `factory` contract for deploying basket/token pairs.
-- `basket` contract for deposits, withdrawals, NAV views, holdings, and cost basis.
-- `oracle_adapter` contract for primary oracle reads and M-of-N fallback pricing.
-- `settlement` contract boundary with oracle-based slippage checks.
+### Product application
 
-### Off-Chain Services
+- React and TypeScript application in [`app`](app), separate from the removed legacy preview.
+- Freighter and Rabet wallet adapters; all signing remains client-side.
+- Basket explorer with visual composition, NAV, AUM, and freshness context.
+- Basket detail with deposit, withdraw, fee preview, transaction lifecycle, and history.
+- Portfolio and liquidity views for diversified positions and transferable basket shares.
+- Multi-step basket creation: assets, weights, identity, review, and signed factory deployment.
+- Manual percentage entry, sliders, equal-weight normalization, and live 100% validation.
+- Visual before/after rebalance editor, per-asset drift diagnostics, quote preview, and authorization gating.
+- Creator profiles, signature-protected editing, and rebalance-notification preferences.
+- Mechanical rebalance suggestions labeled **algorithmic suggestion, not investment advice**.
+- Separate presentation of live on-chain NAV history and simulated historical performance.
+- Persistent TESTNET ONLY banner and a Risks page linked from every route.
+- Route-level code splitting and a fail-closed startup contract health check.
 
-- `services/indexer` polls Soroban RPC contract events and writes normalized basket activity into Postgres.
-- `services/api` exposes frontend REST reads from Postgres, with Redis used for hot-path NAV/AUM cache keys.
-- `services/relayer` runs reviewed rule-based rebalance strategies only, dry-run by default, and rejects live mode without an M-of-N signer quorum.
-- `docker-compose.yml` runs Postgres, Redis, indexer, API, and relayer for local development.
+## Architecture
 
-### Basket Mechanics
+```text
+app (React/TypeScript)
+  |-- client-side wallet signing ----> Stellar testnet / Soroban
+  |-- basket reads -------------------> API
+                                        |
+services/indexer --> Postgres <---------+--> services/api --> Redis
+services/relayer --> M-of-N rebalance --+--> basket --> settlement --> Soroswap
+services/backtester --> historical files +--> API
+```
 
-- Creator-defined basket name, assets, and weights.
-- Weight validation.
-- NAV-based minting and burning.
-- Per-holder average cost basis.
-- Creator withdrawal fee applied only on realized profit.
-- Basket token transferability outside the protocol.
+The API/indexer is the intended source of truth for discovery and event history. The public Go backend is not yet hosted, so production readiness remains blocked even though the frontend's startup health check reads contract metadata directly to prevent address drift.
 
-### Rebalancing Guards
-
-- Creator-gated rebalance path.
-- Authorized rebalancer quorum path.
-- Max drift per rebalance call.
-- Total basket token supply invariant during rebalance.
-- Settlement slippage checks against oracle quote.
-
-### Oracle And Trust Model
-
-- Primary Soroban-native oracle integration path.
-- Stale price rejection.
-- Fallback price path requiring M-of-N authorized signers.
-- No single fallback oracle key assumption.
-
-### Frontend
-
-- React + TypeScript app for basket discovery, deposit, withdraw, portfolio, and creator workflows.
-- Freighter wallet integration for client-side signing.
-- Basket explorer backed by the API service, not direct chain polling for basket lists or history.
-- UI copy centered on diversified exposure and one-token basket ownership.
-- Static Vercel routing config for the built app.
-
-## What Is Pending
-
-### Production Rebalancer Hardening
-
-The v1 off-chain stack includes a lean rule-based relayer. Production hardening still needs:
-
-- M-of-N signer coordination flow
-- monitoring for drift thresholds
-- transaction simulation before submission
-- alerting for failed or rejected rebalance attempts
-
-### Real Settlement Execution
-
-The current settlement crate is a guarded simulation boundary. The next step is wiring real routes:
-
-- Soroswap router integration
-- pool path selection
-- multi-hop route support
-- exact-in/exact-out handling
-- real liquidity seeding for testnet demos
-- slippage checks against actual realized swap output
-
-### Oracle Hardening
-
-- Dual-source oracle validation.
-- Oracle source failover policy.
-- Better typed errors for stale/missing feeds.
-- Production-grade signer rotation for fallback publishers.
-
-### Frontend And Waitlist
-
-- Persist waitlist emails through a backend or form provider.
-- Add production analytics only after privacy review.
-- Add legal/disclaimer copy before public launch.
-- Replace local-only waitlist storage.
-
-### Contract Polish
-
-- Replace deprecated event publishing with typed contract events.
-- Add more integration tests around multi-asset deposits and withdrawals.
-- Add fuzz/property tests for weight and cost-basis math.
-- Add deployment scripts for repeatable testnet/mainnet releases.
-- Convert the manual hardened testnet deployment flow into a repeatable deployment script.
-
-## Repository Layout
+## Workspace
 
 ```text
 contracts/
-  basket/          basket logic, NAV, deposits, withdrawals, rebalancing
-  basket_token/    transferable basket share token
-  factory/         basket and basket-token deployment flow
-  oracle_adapter/  primary oracle and fallback price quorum
-  settlement/      settlement boundary and slippage checks
-
-site/
-  src/             React + TypeScript frontend
-  assets/          hero and product media
-  package.json     frontend scripts and wallet dependencies
-  assets/          hero video
-
+  basket/          Deposit, withdrawal, NAV, cost basis, rebalance, safety controls
+  basket_token/    Transferable basket shares
+  factory/         Basket and token deployment, creator lookup
+  settlement/      Soroswap routes and oracle-protected execution
+  oracle_adapter/  Reflector reads and M-of-N fallback prices
 services/
-  api/             REST API for frontend reads
-  indexer/         Soroban RPC event indexer
-  relayer/         reviewed rule-based rebalance process
-  db/schema.sql    Postgres schema
-
-vercel.json        static deployment routing
-docker-compose.yml local service stack
+  indexer/         Soroban event ingestion
+  api/             REST API
+  relayer/         Rule-based authorized rebalance process
+  backtester/      Historical price ingestion and simulation
+  internal/        Shared config, database, cache, event, and HTTP packages
+app/               Product application
+config/            Canonical testnet deployment manifest
+scripts/           Deployment and multisignature helpers
+reports/history/   Superseded smoke-test reports
 ```
 
-## Contract Crates
+## Contract flows
 
-### `basket_token`
+### Create
 
-Transferable basket share token. It supports transfers, approvals, minting, burning, balances, supply, and metadata.
+`factory.create_basket` validates exact 10,000 basis-point weights, deploys a basket and transferable token, initializes both, and records creator-to-basket lookup state.
 
-### `factory`
+### Deposit
 
-Deploys basket contracts and their corresponding basket share tokens from creator-defined names, assets, and target weights.
+1. The depositor authorizes the transaction.
+2. The basket checks pause state and maximum transaction size.
+3. Current NAV determines shares to mint.
+4. Settlement executes oracle-protected exact-in swaps into constituents.
+5. The token mints transferable shares and cost basis is updated.
 
-### `basket`
+### Withdraw
 
-Handles the main user and basket state flows:
+1. The holder authorizes their own withdrawal.
+2. Shares and proportional constituent balances are calculated with checked arithmetic.
+3. Settlement unwinds constituents using oracle-protected routes.
+4. Profit is measured against that holder's average cost basis.
+5. Creator fee is charged only when realized profit is positive.
+6. Shares burn and net XLM returns to the holder.
 
-- deposit
-- withdraw
-- NAV
-- holdings
-- per-holder average cost basis
-- profit-only creator withdrawal fee
-- rebalancing
-- rebalancer quorum checks
-- max-drift checks
+### Rebalance
 
-### `oracle_adapter`
+1. The creator authorizes directly, or configured rebalancers satisfy the on-chain quorum.
+2. Every asset's requested change is checked against max drift per call.
+3. Required sells and buys execute through settlement with oracle slippage protection.
+4. Target weights update only after successful swaps.
+5. Basket token supply remains unchanged.
 
-Reads prices from a primary Soroban-native oracle and supports a fallback path that requires M-of-N authorized signers.
+## Error model
 
-### `settlement`
+Contracts expose stable typed ranges so clients can render actionable messages:
 
-Enforces oracle-based slippage checks for deposit, withdraw, rebalance, and swap paths.
+| Contract | Range | Examples |
+| --- | --- | --- |
+| Basket | `1001-1022` | paused, amount limit, drift exceeded, quorum not met |
+| Basket token | `2001-2006` | unauthorized, invalid amount, insufficient balance |
+| Factory | `3001-3010` | invalid weights, invalid config, initialization state |
+| Settlement | `4001-4014` | missing route, slippage exceeded, timelock state |
+| Oracle adapter | `5001-5012` | stale price, unavailable price, invalid quorum |
 
-## Development
+## Local development
 
-Install the Rust and Stellar toolchain:
+### Requirements
+
+- Rust stable with `wasm32v1-none`
+- Stellar CLI 23 or newer
+- Go matching [`services/go.mod`](services/go.mod)
+- Node.js 20 or newer
+- Docker Desktop for the full local service stack
+
+Copy environment templates without committing local values:
 
 ```powershell
-rustup update stable
-rustup target add wasm32v1-none
-cargo install stellar-cli --locked --version 27.0.0
+Copy-Item .env.testnet.example .env
+Copy-Item app/.env.example app/.env.local
 ```
 
-Run tests:
-
-```powershell
-cargo test --workspace
-```
-
-Build contracts:
-
-```powershell
-stellar contract build
-```
-
-Preview frontend locally:
-
-```powershell
-npm install --prefix site
-npm run dev
-```
-
-Preview the frontend on port `8080` with the lightweight mock API on `8081`:
-
-```powershell
-npm --prefix site run mock-api
-npm --prefix site run dev:8080
-```
-
-Frontend environment:
-
-```powershell
-$env:VITE_SQIM_API_URL="http://localhost:8081"
-$env:VITE_SOROBAN_RPC_URL="https://soroban-testnet.stellar.org"
-$env:VITE_SOROBAN_NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
-$env:VITE_SQIM_FACTORY_CONTRACT_ID="CBYWTMUFK6DXO4CN4QZASWXAK7BXGJLPWDQNA3CNBOMRCX7GUGTNNKPZ"
-$env:VITE_SQIM_DEFAULT_BASKET_ID="CABCGGFYGPWYNRPJIXFN6YHGER7YHY4CH4GWHQZUHAFEO7A6EJNS64VZ"
-$env:VITE_SQIM_INVESTABLE_BASKET_IDS="CABCGGFYGPWYNRPJIXFN6YHGER7YHY4CH4GWHQZUHAFEO7A6EJNS64VZ"
-$env:VITE_SQIM_ENABLE_CONTRACT_WRITES="true"
-```
-
-Wallet support:
-
-- v1 ships with Freighter signing through `@stellar/freighter-api`.
-- Stellar Wallets Kit is the planned abstraction for additional wallets such as xBull, Albedo, Hana, Lobstr through WalletConnect, Rabet, Ledger, and Trezor.
-- The frontend never handles private keys. It builds transactions, sends XDR to the connected wallet, and submits only signed transactions.
-- Local testing defaults point at the factory-created initialized testnet basket. Keep writes on testnet only, with `VITE_SQIM_INVESTABLE_BASKET_IDS` and `VITE_SQIM_ENABLE_CONTRACT_WRITES=true`.
-
-Run the local off-chain stack:
+Start the complete service stack:
 
 ```powershell
 docker compose up --build
 ```
 
-Run the local smoke suite:
+Start the application:
 
 ```powershell
-npm run smoke
+npm --prefix app ci
+npm --prefix app run dev
 ```
 
-The smoke script checks:
+Default local endpoints:
 
-- frontend route on `http://localhost:8080`
-- mock/API routes on `http://localhost:8081`
-- frontend tests and production build
-- Soroban contract tests and WASM build
-- optional Go and Docker checks when those tools are installed
-
-Switch RPC networks without code changes:
-
-```powershell
-$env:SOROBAN_RPC_URL="https://soroban-testnet.stellar.org"
-$env:SOROBAN_NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
-docker compose up --build
-```
-
-API examples:
-
-```powershell
-curl http://localhost:8081/health
-curl http://localhost:8081/baskets
-curl http://localhost:8081/baskets/<basket-contract-id>/history
-curl http://localhost:8081/baskets/<basket-contract-id>/metrics
-```
-
-Run the Postgres-backed integration test:
-
-```powershell
-cd services
-$env:SQIM_TEST_DATABASE_URL="postgres://sqim:sqim@localhost:5432/sqim?sslmode=disable"
-go test -tags=integration ./integration
-```
-
-## Tests Covered
-
-- first deposit
-- second deposit at a different NAV
-- partial withdrawal
-- full withdrawal
-- withdrawal at a loss with zero fee
-- unauthorized withdrawal failure
-- basket token transferability
-- rebalance success path
-- unauthorized rebalance failure
-- max-drift rebalance failure
-- slippage failure
-- stale oracle price failure without fallback quorum
-- pause blocking deposit, withdraw, and rebalance
-- timelocked withdrawal-fee and rebalancer-set changes
-- max transaction-size guards
-- withdrawal and rebalance slippage guard regressions
-- timelocked settlement slippage-cap changes
-- timelocked oracle fallback signer/quorum changes
-- on-chain fallback oracle quorum enforcement
-
-## Testnet Contracts
-
-Fresh hardened preview contracts deployed on Stellar testnet under the `ayisha` development identity on July 13, 2026. This is still a testnet preview, not a mainnet launch approval.
-
-| Contract | Testnet Contract ID | Explorer |
-| --- | --- | --- |
-| `factory` | `CBYWTMUFK6DXO4CN4QZASWXAK7BXGJLPWDQNA3CNBOMRCX7GUGTNNKPZ` | [View](https://stellar.expert/explorer/testnet/contract/CBYWTMUFK6DXO4CN4QZASWXAK7BXGJLPWDQNA3CNBOMRCX7GUGTNNKPZ) |
-| `basket` | `CABCGGFYGPWYNRPJIXFN6YHGER7YHY4CH4GWHQZUHAFEO7A6EJNS64VZ` | [View](https://stellar.expert/explorer/testnet/contract/CABCGGFYGPWYNRPJIXFN6YHGER7YHY4CH4GWHQZUHAFEO7A6EJNS64VZ) |
-| `basket_token` | `CARGKEM34YZ4DCNMSSLMOPMIAAJGAF5CKGAAMJWV7E2AI5QFFGPGYEBM` | [View](https://stellar.expert/explorer/testnet/contract/CARGKEM34YZ4DCNMSSLMOPMIAAJGAF5CKGAAMJWV7E2AI5QFFGPGYEBM) |
-| `settlement` | `CDNKWO64BEB4GJ4EAVSIHE3IVCGYI25UZK6DYD3CGSSRJBJGN63N3K7U` | [View](https://stellar.expert/explorer/testnet/contract/CDNKWO64BEB4GJ4EAVSIHE3IVCGYI25UZK6DYD3CGSSRJBJGN63N3K7U) |
-| `oracle_adapter` | `CDMZIC6FKPT6B6LYPAZVXBV2COP5BZSAM4VIIY67OGGGVPNBW7QWAKNR` | [View](https://stellar.expert/explorer/testnet/contract/CDMZIC6FKPT6B6LYPAZVXBV2COP5BZSAM4VIIY67OGGGVPNBW7QWAKNR) |
-| `mock_deposit_asset` | `CASNUWD2Z4RCUUY4LZEO7XRKHGMNRR55K7BMMUUH6PVIMYZF4IMU5RS4` | [View](https://stellar.expert/explorer/testnet/contract/CASNUWD2Z4RCUUY4LZEO7XRKHGMNRR55K7BMMUUH6PVIMYZF4IMU5RS4) |
-
-Manual testnet proof:
-
-| Flow | Result | Transaction |
-| --- | --- | --- |
-| Deposit `10000000` mock asset into basket | Minted `10000000` basket tokens | [View](https://stellar.expert/explorer/testnet/tx/b608fa1aedef563e71f9ec49d3a101f2f62341c9b80bc22dc368ebfb6c893af7) |
-| Transfer `4000000` basket tokens to third party | Transfer event emitted by basket token | [View](https://stellar.expert/explorer/testnet/tx/b8d55581d89f658ccc9b0c9542ef9c318e8e792ffc91f65beb28f5757eb05636) |
-| Withdraw `2000000` basket tokens from third-party holder | Returned `2000000` mock asset, fee `0` | [View](https://stellar.expert/explorer/testnet/tx/cdb90bc129705eeedbac3979768273f3a308f6ae2d103d2ac5ae332db97d1aed) |
-
-Current hardened local WASM hashes:
-
-| Contract | WASM Hash |
+| Service | URL |
 | --- | --- |
-| `factory` | `57b6a0771da160747c4ba8182354b69701b1bcb820188320cfc45902678ca213` |
-| `basket` | `7bb0afef51a8410ede6f9f3c241521abf2ff5e1f358ba9ecfd6ef2a2e23bfc43` |
-| `basket_token` | `3aecf7efc53ac4098af30e06d96c6583dc5584983526358473e89a6e1c4cd08d` |
-| `settlement` | `569ff92714f3c8dec30305f5c1a287c7ddab73d82998294a1eb0be1c095582fc` |
-| `oracle_adapter` | `ac24d7a2d51562f8b0f3e1af9100566ddd2bbb5b182e193f161ae6c224aaabcd` |
+| App | `http://localhost:8080` |
+| API | `http://localhost:8081` |
+| Postgres | `localhost:5432` |
+| Redis | `localhost:6379` |
 
-## Deployment Notes
+## Verification
 
-The contracts have been built and tested locally against the testnet-oriented configuration. Do not treat the legacy preview contract IDs as production-safe hardened deployments. Mainnet deployment is intentionally out of scope until audit completion.
+```powershell
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+stellar contract build
 
-The frontend is configured for Vercel as a static site through `vercel.json`.
+Push-Location services
+gofmt -w .
+go vet ./...
+go test ./...
+go test -tags=integration ./integration
+Pop-Location
+
+npm ci
+npm run check
+npm test
+npm run build
+```
+
+The integration-tagged Go test requires a reachable Postgres database. A skipped integration test is not a production-readiness pass.
+
+## Deployment
+
+Contracts, testnet only:
+
+```powershell
+.\scripts\deploy-testnet.ps1
+```
+
+Frontend:
+
+```powershell
+.\scripts\deploy-frontend.ps1
+```
+
+Both scripts are designed for clean-checkout use. The contract script rejects any network passphrase other than Stellar testnet. No script changes mainnet configuration.
+
+## Known gaps
+
+- Real Freighter create/deposit/rebalance/withdraw evidence in a browser with the extension installed.
+- Public deployment of Postgres, Redis, indexer, API, and relayer.
+- Docker Compose and integration-test evidence on a Docker-capable machine.
+- Durable outbound email provider for waitlist and drift notifications.
+- Intended production-domain ownership and routing.
+- GitHub push and green CI on the final state.
+- Independent professional contract audit.
+- Mainnet checklist and cutover, deliberately out of scope.
+
+## Security
+
+Review [`THREATS.md`](THREATS.md) before operating the testnet deployment. Report vulnerabilities privately to the repository owner. Do not test suspected exploits with mainnet assets.
+
+## License
+
+No open-source license has been granted yet. All rights are reserved unless a license is added explicitly.
