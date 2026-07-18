@@ -13,3 +13,4 @@ soroban-sdk.workspace = true
 
 [dev-dependencies]
 oracle_adapter = { path = "../oracle_adapter" }
+soroban-sdk = { workspace = true, features = ["testutils"] }
