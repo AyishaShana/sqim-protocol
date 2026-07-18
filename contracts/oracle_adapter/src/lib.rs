@@ -1,10 +1,29 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractclient, contractimpl, contracttype, symbol_short, Address, Env, Symbol, Vec,
+    contract, contractclient, contracterror, contractevent, contractimpl, contracttype,
+    panic_with_error, Address, Env, Symbol, Vec,
 };
 
 const ADMIN_TIMELOCK_SECONDS: u64 = 86_400;
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[repr(u32)]
+pub enum Error {
+    AlreadyInitialized = 5001,
+    InvalidMaxAge = 5002,
+    InvalidQuorum = 5003,
+    NotInitialized = 5004,
+    TimelockNotReady = 5005,
+    PriceUnavailableOrStale = 5006,
+    Unauthorized = 5007,
+    UnauthorizedSigner = 5008,
+    QuorumNotMet = 5009,
+    DuplicateSigner = 5010,
+    InvalidPrice = 5011,
+    ArithmeticOverflow = 5012,
+}
 
 #[derive(Clone)]
 #[contracttype]
@@ -34,6 +53,15 @@ pub struct TimelockedFallbackConfig {
     pub signers: Vec<Address>,
     pub threshold: u32,
     pub execute_after: u64,
+}
+
+#[contractevent(topics = ["fallback"], data_format = "vec")]
+#[derive(Clone)]
+pub struct FallbackPriceEvent {
+    #[topic]
+    pub asset: Address,
+    pub price_e7: i128,
+    pub updated_at: u64,
 }
 
 #[contractclient(name = "ReflectorPulseClient")]
@@ -72,12 +100,12 @@ impl OracleAdapter {
         fallback_threshold: u32,
     ) {
         if env.storage().instance().has(&DataKey::Initialized) {
-            panic!("oracle adapter already initialized");
+            panic_with_error!(&env, Error::AlreadyInitialized);
         }
         if max_age_seconds == 0 {
-            panic!("oracle max age must be positive");
+            panic_with_error!(&env, Error::InvalidMaxAge);
         }
-        validate_quorum(&fallback_signers, fallback_threshold);
+        validate_quorum(&env, &fallback_signers, fallback_threshold);
 
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
@@ -128,7 +156,7 @@ impl OracleAdapter {
         signers: Vec<Address>,
         threshold: u32,
     ) -> u64 {
-        validate_quorum(&signers, threshold);
+        validate_quorum(&env, &signers, threshold);
         require_admin(&env, &admin);
         let execute_after = timelock_ready_at(&env);
         env.storage().instance().set(
@@ -148,9 +176,9 @@ impl OracleAdapter {
             .storage()
             .instance()
             .get(&DataKey::PendingFallbackConfig)
-            .unwrap();
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NotInitialized));
         if env.ledger().timestamp() < pending.execute_after {
-            panic!("oracle adapter admin timelock not ready");
+            panic_with_error!(&env, Error::TimelockNotReady);
         }
         env.storage()
             .instance()
@@ -170,10 +198,10 @@ impl OracleAdapter {
         updated_at: u64,
         signers: Vec<Address>,
     ) {
-        check_price(price_e7);
+        check_price(&env, price_e7);
         let authorized = read_fallback_signers(&env);
         let threshold = read_fallback_threshold(&env);
-        require_fallback_quorum(&authorized, threshold, &signers);
+        require_fallback_quorum(&env, &authorized, threshold, &signers);
 
         let price = Price {
             asset: asset.clone(),
@@ -183,8 +211,12 @@ impl OracleAdapter {
         env.storage()
             .persistent()
             .set(&DataKey::FallbackPrice(asset.clone()), &price);
-        env.events()
-            .publish((symbol_short!("fallback"), asset), (price_e7, updated_at));
+        FallbackPriceEvent {
+            asset,
+            price_e7,
+            updated_at,
+        }
+        .publish(&env);
     }
 
     pub fn price(env: Env, asset: Address) -> Price {
@@ -194,14 +226,14 @@ impl OracleAdapter {
         if let Some(price) = fallback_price(&env, &asset) {
             return price;
         }
-        panic!("oracle price unavailable or stale");
+        panic_with_error!(&env, Error::PriceUnavailableOrStale);
     }
 
     pub fn max_age_seconds(env: Env) -> u64 {
         env.storage()
             .instance()
             .get(&DataKey::MaxAgeSeconds)
-            .unwrap()
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NotInitialized))
     }
 }
 
@@ -218,12 +250,12 @@ fn primary_price(env: &Env, asset: &Address) -> Option<Price> {
         .storage()
         .instance()
         .get(&DataKey::PrimaryOracle)
-        .unwrap();
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
     let reflector_asset = primary_asset(env, asset);
     let client = ReflectorPulseClient::new(env, &oracle);
     let data = client.lastprice(&reflector_asset)?;
     let decimals = client.decimals();
-    let price_e7 = normalize_price(data.price, decimals);
+    let price_e7 = normalize_price(env, data.price, decimals);
     let price = Price {
         asset: asset.clone(),
         price_e7,
@@ -244,9 +276,13 @@ fn primary_asset(env: &Env, asset: &Address) -> ReflectorAsset {
 }
 
 fn require_admin(env: &Env, admin: &Address) {
-    let stored: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+    let stored: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::Admin)
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
     if stored != *admin {
-        panic!("oracle adapter admin mismatch");
+        panic_with_error!(env, Error::Unauthorized);
     }
     admin.require_auth();
 }
@@ -255,7 +291,7 @@ fn timelock_ready_at(env: &Env) -> u64 {
     env.ledger()
         .timestamp()
         .checked_add(ADMIN_TIMELOCK_SECONDS)
-        .unwrap()
+        .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow))
 }
 
 fn fallback_price(env: &Env, asset: &Address) -> Option<Price> {
@@ -270,12 +306,14 @@ fn fallback_price(env: &Env, asset: &Address) -> Option<Price> {
     }
 }
 
-fn normalize_price(price: i128, decimals: u32) -> i128 {
-    check_price(price);
+fn normalize_price(env: &Env, price: i128, decimals: u32) -> i128 {
+    check_price(env, price);
     if decimals == 7 {
         price
     } else if decimals < 7 {
-        price.checked_mul(10_i128.pow(7 - decimals)).unwrap()
+        price
+            .checked_mul(10_i128.pow(7 - decimals))
+            .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow))
     } else {
         price / 10_i128.pow(decimals - 7)
     }
@@ -286,44 +324,49 @@ fn is_fresh(env: &Env, updated_at: u64) -> bool {
         .storage()
         .instance()
         .get(&DataKey::MaxAgeSeconds)
-        .unwrap();
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
     let now = env.ledger().timestamp();
     updated_at <= now && now - updated_at <= max_age
 }
 
-fn validate_quorum(signers: &Vec<Address>, threshold: u32) {
+fn validate_quorum(env: &Env, signers: &Vec<Address>, threshold: u32) {
     if threshold == 0 || threshold > signers.len() {
-        panic!("invalid fallback oracle quorum");
+        panic_with_error!(env, Error::InvalidQuorum);
     }
-    assert_unique(signers);
+    assert_unique(env, signers);
 }
 
 fn read_fallback_signers(env: &Env) -> Vec<Address> {
     env.storage()
         .instance()
         .get(&DataKey::FallbackSigners)
-        .unwrap()
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
 }
 
 fn read_fallback_threshold(env: &Env) -> u32 {
     env.storage()
         .instance()
         .get(&DataKey::FallbackThreshold)
-        .unwrap()
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
 }
 
-fn require_fallback_quorum(authorized: &Vec<Address>, threshold: u32, signers: &Vec<Address>) {
-    assert_unique(signers);
+fn require_fallback_quorum(
+    env: &Env,
+    authorized: &Vec<Address>,
+    threshold: u32,
+    signers: &Vec<Address>,
+) {
+    assert_unique(env, signers);
     let mut count = 0_u32;
     for signer in signers.iter() {
         if !contains(authorized, &signer) {
-            panic!("unauthorized fallback oracle signer");
+            panic_with_error!(env, Error::UnauthorizedSigner);
         }
         signer.require_auth();
         count += 1;
     }
     if count < threshold {
-        panic!("fallback oracle quorum not met");
+        panic_with_error!(env, Error::QuorumNotMet);
     }
 }
 
@@ -336,20 +379,20 @@ fn contains(addresses: &Vec<Address>, needle: &Address) -> bool {
     false
 }
 
-fn assert_unique(addresses: &Vec<Address>) {
+fn assert_unique(env: &Env, addresses: &Vec<Address>) {
     for i in 0..addresses.len() {
         let left = addresses.get_unchecked(i);
         for j in (i + 1)..addresses.len() {
             if left == addresses.get_unchecked(j) {
-                panic!("duplicate signer");
+                panic_with_error!(env, Error::DuplicateSigner);
             }
         }
     }
 }
 
-fn check_price(price_e7: i128) {
+fn check_price(env: &Env, price_e7: i128) {
     if price_e7 <= 0 {
-        panic!("basket price must be positive");
+        panic_with_error!(env, Error::InvalidPrice);
     }
 }
 
