@@ -28,6 +28,11 @@ func main() {
 	if err := db.ApplySchemaFile(ctx, cfg.SchemaPath); err != nil {
 		log.Fatalf("apply schema: %v", err)
 	}
+	if !cfg.AllowTestFixtures {
+		if err := db.AssertNoFixtureIDs(ctx); err != nil {
+			log.Fatalf("refuse non-test database with fixture contract IDs: %v", err)
+		}
+	}
 
 	var redisCache *cache.Cache
 	if c, err := cache.New(cfg.RedisURL); err == nil && c.Ping(ctx) == nil {
