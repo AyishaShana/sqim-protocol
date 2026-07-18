@@ -1,12 +1,16 @@
 param(
     [string]$FrontendUrl = "http://localhost:8080",
     [string]$ApiUrl = "http://localhost:8081",
-    [string]$BasketId = "CABCGGFYGPWYNRPJIXFN6YHGER7YHY4CH4GWHQZUHAFEO7A6EJNS64VZ",
+    [string]$BasketId = "",
     [switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
+$deployment = Get-Content (Join-Path $repo "config/testnet.json") -Raw | ConvertFrom-Json
+if (-not $BasketId) {
+    $BasketId = $deployment.basket
+}
 
 function Step($message) {
     Write-Host "`n==> $message" -ForegroundColor Cyan
@@ -54,10 +58,10 @@ try {
 
     if (-not $SkipBuild) {
         Step "Frontend tests"
-        npm --prefix site test
+        npm --prefix app test
 
         Step "Frontend production build"
-        npm --prefix site run build
+        npm --prefix app run build
 
         Step "Soroban contract tests"
         cargo test -q

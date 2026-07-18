@@ -1,6 +1,5 @@
 {
-  "buildCommand": "npm --prefix site run build",
-  "outputDirectory": "site/dist",
-  "cleanUrls": true,
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "buildCommand": "npm --prefix app ci && npm --prefix app run build",
+  "outputDirectory": "app/dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
 }

@@ -1,8 +1,12 @@
 {
   "scripts": {
-    "dev": "npm --prefix site run dev",
-    "build": "npm --prefix site run build",
-    "preview": "npm --prefix site run preview",
+    "dev": "npm --prefix app run dev",
+    "build": "npm --prefix app run build",
+    "check": "npm run format:check && npm run lint && npm test && npm run build",
+    "format:check": "npm --prefix app run format:check",
+    "lint": "npm --prefix app run lint",
+    "test": "npm --prefix app test",
+    "preview": "npm --prefix app run preview",
     "smoke": "powershell -ExecutionPolicy Bypass -File scripts/smoke.ps1"
   }
 }

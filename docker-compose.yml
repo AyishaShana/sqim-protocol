@@ -34,11 +34,12 @@ services:
     environment:
       DATABASE_URL: postgres://sqim:sqim@postgres:5432/sqim?sslmode=disable
       SCHEMA_PATH: /app/db/schema.sql
-      SOROBAN_RPC_URL: ${SOROBAN_RPC_URL:-https://soroban-testnet.stellar.org}
-      SOROBAN_NETWORK_PASSPHRASE: ${SOROBAN_NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}
-      SQIM_CONTRACT_IDS: ${SQIM_CONTRACT_IDS:-CBYWTMUFK6DXO4CN4QZASWXAK7BXGJLPWDQNA3CNBOMRCX7GUGTNNKPZ,CABCGGFYGPWYNRPJIXFN6YHGER7YHY4CH4GWHQZUHAFEO7A6EJNS64VZ,CARGKEM34YZ4DCNMSSLMOPMIAAJGAF5CKGAAMJWV7E2AI5QFFGPGYEBM,CDNKWO64BEB4GJ4EAVSIHE3IVCGYI25UZK6DYD3CGSSRJBJGN63N3K7U,CDMZIC6FKPT6B6LYPAZVXBV2COP5BZSAM4VIIY67OGGGVPNBW7QWAKNR,CASNUWD2Z4RCUUY4LZEO7XRKHGMNRR55K7BMMUUH6PVIMYZF4IMU5RS4}
+      SOROBAN_RPC_URL: ${SOROBAN_RPC_URL:?Copy .env.testnet.example to .env.testnet and configure SOROBAN_RPC_URL}
+      SOROBAN_NETWORK_PASSPHRASE: ${SOROBAN_NETWORK_PASSPHRASE:?Configure the testnet network passphrase}
+      SQIM_CONTRACT_IDS: ${SQIM_CONTRACT_IDS:?Configure the active contract generation from config/testnet.json}
+      SQIM_ALLOW_TEST_FIXTURES: "false"
       INDEXER_POLL_INTERVAL: ${INDEXER_POLL_INTERVAL:-8s}
-      INDEXER_START_LEDGER: ${INDEXER_START_LEDGER:-0}
+      INDEXER_START_LEDGER: ${INDEXER_START_LEDGER:-3608727}
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,6 +55,8 @@ services:
       DATABASE_URL: postgres://sqim:sqim@postgres:5432/sqim?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       SCHEMA_PATH: /app/db/schema.sql
+      SQIM_ALLOW_TEST_FIXTURES: "false"
+      BACKTESTER_URL: http://backtester:8090
     ports:
       - "8081:8080"
     depends_on:
@@ -61,6 +64,29 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      backtester:
+        condition: service_healthy
+
+  backtester:
+    build:
+      context: ./services
+      dockerfile: Dockerfile
+      args:
+        SERVICE: backtester
+    environment:
+      BACKTESTER_ADDR: :8090
+      BACKTEST_DATA_DIR: /app/data/backtests
+      MARKET_DATA_BASE_URL: ${MARKET_DATA_BASE_URL:-https://data-api.binance.vision}
+      BACKTEST_ASSETS: ${BACKTEST_ASSETS:-BTC,ETH,XLM,SOL,USDC}
+    ports:
+      - "8090:8090"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8090/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - backtest-data:/app/data/backtests
 
   relayer:
     build:
@@ -71,11 +97,18 @@ services:
     environment:
       DATABASE_URL: postgres://sqim:sqim@postgres:5432/sqim?sslmode=disable
       SCHEMA_PATH: /app/db/schema.sql
-      SOROBAN_RPC_URL: ${SOROBAN_RPC_URL:-https://soroban-testnet.stellar.org}
-      SOROBAN_NETWORK_PASSPHRASE: ${SOROBAN_NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}
+      SOROBAN_RPC_URL: ${SOROBAN_RPC_URL:?Configure the testnet RPC URL}
+      SOROBAN_NETWORK_PASSPHRASE: ${SOROBAN_NETWORK_PASSPHRASE:?Configure the testnet network passphrase}
       RELAYER_DRY_RUN: ${RELAYER_DRY_RUN:-true}
       RELAYER_REBALANCER_QUORUM: ${RELAYER_REBALANCER_QUORUM:-2}
       RELAYER_REBALANCER_SIGNERS: ${RELAYER_REBALANCER_SIGNERS:-}
+      RELAYER_CALLER_ADDRESS: ${RELAYER_CALLER_ADDRESS:-}
+      RELAYER_SIGN_WITH_KEY: ${RELAYER_SIGN_WITH_KEY:-}
+      RELAYER_AUTH_HELPER: ${RELAYER_AUTH_HELPER:-}
+      RELAYER_AUTH_HELPER_SCRIPT: ${RELAYER_AUTH_HELPER_SCRIPT:-}
+      RELAYER_SOURCE_ACCOUNT: ${RELAYER_SOURCE_ACCOUNT:-ayisha}
+      STELLAR_CLI_PATH: ${STELLAR_CLI_PATH:-stellar}
+      SQIM_ALLOW_TEST_FIXTURES: "false"
       RELAYER_INTERVAL: ${RELAYER_INTERVAL:-60s}
     depends_on:
       postgres:
@@ -83,3 +116,4 @@ services:
 
 volumes:
   postgres-data:
+  backtest-data:
