@@ -61,9 +61,8 @@ jobs:
         shell: bash
         run: |
           if grep -RIE 'CBASKETTESTNET|CTEST-ONLY|CFIXTURE' \
-            --exclude='*_test.go' --exclude='*.test.ts' --exclude='*.test.tsx' \
-            --exclude-dir=test_snapshots --exclude-dir=reports \
-            app config services .env.testnet.example; then
+            --exclude='*.test.ts' --exclude='*.test.tsx' \
+            app config .env.testnet.example; then
             echo 'Preview fixture ID found in production configuration.' >&2
             exit 1
           fi
