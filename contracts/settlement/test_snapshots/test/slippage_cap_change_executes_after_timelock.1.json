@@ -245,18 +245,6 @@
                       "val": {
                         "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                       }
-                    },
-                    {
-                      "key": {
-                        "vec": [
-                          {
-                            "symbol": "SimulatedSlippageBps"
-                          }
-                        ]
-                      },
-                      "val": {
-                        "u32": 0
-                      }
                     }
                   ]
                 }
