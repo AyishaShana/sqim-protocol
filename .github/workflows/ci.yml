@@ -21,9 +21,15 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - name: Install pinned Stellar CLI
+        run: |
+          curl --fail --silent --show-error --location \
+            https://github.com/stellar/stellar-cli/releases/download/v23.1.4/stellar-cli-23.1.4-x86_64-unknown-linux-gnu.tar.gz \
+            | tar --extract --gzip
+          sudo install stellar /usr/local/bin/stellar
+          stellar --version
       - name: Build Soroban WASM
         run: |
-          cargo install --locked stellar-cli
           stellar contract build
 
   services:
