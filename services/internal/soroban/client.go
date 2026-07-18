@@ -12,7 +12,7 @@ import (
 )
 
 type Client struct {
-	url        string
+	url       string
 	http      *http.Client
 	requestID int
 }
@@ -32,17 +32,30 @@ type GetEventsParams struct {
 }
 
 func (c *Client) GetEvents(ctx context.Context, params GetEventsParams) ([]sqimevent.RPCEvent, string, error) {
+	if len(params.ContractIDs) == 0 {
+		return nil, "", fmt.Errorf("at least one contract ID is required")
+	}
+	if len(params.ContractIDs) > 25 {
+		return nil, "", fmt.Errorf("at most 25 contract IDs can be queried in one cursor stream")
+	}
 	c.requestID++
-	filter := map[string]any{
-		"type":        "contract",
-		"contractIds": params.ContractIDs,
+	filters := make([]map[string]any, 0, (len(params.ContractIDs)+4)/5)
+	for start := 0; start < len(params.ContractIDs); start += 5 {
+		end := start + 5
+		if end > len(params.ContractIDs) {
+			end = len(params.ContractIDs)
+		}
+		filters = append(filters, map[string]any{
+			"type":        "contract",
+			"contractIds": params.ContractIDs[start:end],
+		})
 	}
 	payload := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      c.requestID,
 		"method":  "getEvents",
 		"params": map[string]any{
-			"filters": []map[string]any{filter},
+			"filters": filters,
 			"pagination": map[string]any{
 				"limit": params.Limit,
 			},
@@ -80,7 +93,7 @@ func (c *Client) GetEvents(ctx context.Context, params GetEventsParams) ([]sqime
 		} `json:"error"`
 		Result struct {
 			Events []sqimevent.RPCEvent `json:"events"`
-			Cursor string                `json:"cursor"`
+			Cursor string               `json:"cursor"`
 		} `json:"result"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
