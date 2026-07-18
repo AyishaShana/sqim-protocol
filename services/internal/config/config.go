@@ -19,30 +19,39 @@ type Config struct {
 	SchemaPath         string
 	StellarCLIPath     string
 	SourceAccount      string
+	RelayerCaller      string
+	RelayerSignWithKey string
+	RelayerAuthHelper  string
+	RelayerAuthScript  string
 	RelayerDryRun      bool
 	RebalancerSigners  []string
 	RebalancerQuorum   int
 	StrategyInterval   time.Duration
+	AllowTestFixtures  bool
 }
 
 func Load() Config {
 	return Config{
-		APIAddr:           env("API_ADDR", ":8080"),
-		DatabaseURL:       env("DATABASE_URL", "postgres://sqim:sqim@localhost:5432/sqim?sslmode=disable"),
-		RedisURL:          env("REDIS_URL", "redis://localhost:6379/0"),
-		SorobanRPCURL:     env("SOROBAN_RPC_URL", "https://soroban-testnet.stellar.org"),
-		NetworkPassphrase: env("SOROBAN_NETWORK_PASSPHRASE", "Test SDF Network ; September 2015"),
-		ContractIDs: split(env("SQIM_CONTRACT_IDS",
-			"CBYWTMUFK6DXO4CN4QZASWXAK7BXGJLPWDQNA3CNBOMRCX7GUGTNNKPZ,CABCGGFYGPWYNRPJIXFN6YHGER7YHY4CH4GWHQZUHAFEO7A6EJNS64VZ,CARGKEM34YZ4DCNMSSLMOPMIAAJGAF5CKGAAMJWV7E2AI5QFFGPGYEBM,CDNKWO64BEB4GJ4EAVSIHE3IVCGYI25UZK6DYD3CGSSRJBJGN63N3K7U,CDMZIC6FKPT6B6LYPAZVXBV2COP5BZSAM4VIIY67OGGGVPNBW7QWAKNR,CASNUWD2Z4RCUUY4LZEO7XRKHGMNRR55K7BMMUUH6PVIMYZF4IMU5RS4")),
-		PollInterval:     duration("INDEXER_POLL_INTERVAL", 8*time.Second),
-		StartLedger:      uint32(intEnv("INDEXER_START_LEDGER", 0)),
-		SchemaPath:       env("SCHEMA_PATH", "db/schema.sql"),
-		StellarCLIPath:   env("STELLAR_CLI_PATH", "stellar"),
-		SourceAccount:    env("RELAYER_SOURCE_ACCOUNT", "ayisha"),
-		RelayerDryRun:    boolEnv("RELAYER_DRY_RUN", true),
-		RebalancerSigners: split(env("RELAYER_REBALANCER_SIGNERS", "")),
-		RebalancerQuorum: intEnv("RELAYER_REBALANCER_QUORUM", 2),
-		StrategyInterval: duration("RELAYER_INTERVAL", 60*time.Second),
+		APIAddr:            env("API_ADDR", ":8080"),
+		DatabaseURL:        env("DATABASE_URL", "postgres://sqim:sqim@localhost:5432/sqim?sslmode=disable"),
+		RedisURL:           env("REDIS_URL", "redis://localhost:6379/0"),
+		SorobanRPCURL:      env("SOROBAN_RPC_URL", ""),
+		NetworkPassphrase:  env("SOROBAN_NETWORK_PASSPHRASE", ""),
+		ContractIDs:        split(env("SQIM_CONTRACT_IDS", "")),
+		PollInterval:       duration("INDEXER_POLL_INTERVAL", 8*time.Second),
+		StartLedger:        uint32(intEnv("INDEXER_START_LEDGER", 3608727)),
+		SchemaPath:         env("SCHEMA_PATH", "db/schema.sql"),
+		StellarCLIPath:     env("STELLAR_CLI_PATH", "stellar"),
+		SourceAccount:      env("RELAYER_SOURCE_ACCOUNT", "ayisha"),
+		RelayerCaller:      env("RELAYER_CALLER_ADDRESS", ""),
+		RelayerSignWithKey: env("RELAYER_SIGN_WITH_KEY", ""),
+		RelayerAuthHelper:  env("RELAYER_AUTH_HELPER", ""),
+		RelayerAuthScript:  env("RELAYER_AUTH_HELPER_SCRIPT", ""),
+		RelayerDryRun:      boolEnv("RELAYER_DRY_RUN", true),
+		RebalancerSigners:  split(env("RELAYER_REBALANCER_SIGNERS", "")),
+		RebalancerQuorum:   intEnv("RELAYER_REBALANCER_QUORUM", 2),
+		StrategyInterval:   duration("RELAYER_INTERVAL", 60*time.Second),
+		AllowTestFixtures:  boolEnv("SQIM_ALLOW_TEST_FIXTURES", false),
 	}
 }
 
