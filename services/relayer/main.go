@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"strconv"
 	"syscall"
 	"time"
@@ -39,6 +40,11 @@ func main() {
 	if err := db.ApplySchemaFile(ctx, cfg.SchemaPath); err != nil {
 		log.Fatalf("apply schema: %v", err)
 	}
+	if !cfg.AllowTestFixtures {
+		if err := db.AssertNoFixtureIDs(ctx); err != nil {
+			log.Fatalf("refuse non-test database with fixture contract IDs: %v", err)
+		}
+	}
 
 	ticker := time.NewTicker(cfg.StrategyInterval)
 	defer ticker.Stop()
@@ -65,6 +71,25 @@ func validateTrustModel(cfg config.Config) error {
 	}
 	if len(cfg.RebalancerSigners) < cfg.RebalancerQuorum {
 		return errors.New("RELAYER_REBALANCER_SIGNERS must contain enough signers for quorum")
+	}
+	if cfg.RebalancerQuorum != 2 {
+		return errors.New("live v1 relayer currently supports exactly a 2-of-N on-chain quorum")
+	}
+	if cfg.RelayerCaller == "" {
+		return errors.New("RELAYER_CALLER_ADDRESS is required when dry-run is disabled")
+	}
+	if cfg.RelayerAuthHelper == "" || cfg.RelayerAuthScript == "" {
+		return errors.New("RELAYER_AUTH_HELPER and RELAYER_AUTH_HELPER_SCRIPT are required for live quorum signing")
+	}
+	foundCaller := false
+	for _, signer := range cfg.RebalancerSigners {
+		if signer == cfg.RelayerCaller {
+			foundCaller = true
+			break
+		}
+	}
+	if !foundCaller {
+		return errors.New("RELAYER_CALLER_ADDRESS must be in RELAYER_REBALANCER_SIGNERS")
 	}
 	return nil
 }
@@ -151,23 +176,26 @@ func maxDriftBPS(a, b []uint32) int {
 }
 
 func submitRebalance(ctx context.Context, cfg config.Config, basketID string, weights []uint32) (string, error) {
-	args := []string{
-		"contract", "invoke",
-		"--id", basketID,
-		"--rpc-url", cfg.SorobanRPCURL,
-		"--network-passphrase", cfg.NetworkPassphrase,
-		"--source-account", cfg.SourceAccount,
-		"--", "rebalance",
-		"--caller", cfg.SourceAccount,
-		"--new_weights_bps", weightsArg(weights),
-		"--rebalancer_signers", signersArg(cfg.RebalancerSigners[:cfg.RebalancerQuorum]),
-	}
-	cmd := exec.CommandContext(ctx, cfg.StellarCLIPath, args...)
+	args := authHelperArgs(cfg, basketID, weights)
+	cmd := exec.CommandContext(ctx, cfg.RelayerAuthHelper, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", errors.New(string(out))
 	}
-	return string(out), nil
+	hash := regexp.MustCompile(`(?i)\b[0-9a-f]{64}\b`).FindString(string(out))
+	if hash == "" {
+		return "", errors.New("rebalance auth helper succeeded without returning a transaction hash")
+	}
+	return hash, nil
+}
+
+func authHelperArgs(cfg config.Config, basketID string, weights []uint32) []string {
+	return []string{
+		cfg.RelayerAuthScript,
+		basketID,
+		weightsArg(weights),
+		signersArg(cfg.RebalancerSigners[:cfg.RebalancerQuorum]),
+	}
 }
 
 func weightsArg(weights []uint32) string {
@@ -182,12 +210,9 @@ func weightsArg(weights []uint32) string {
 }
 
 func signersArg(signers []string) string {
-	out := "["
-	for i, signer := range signers {
-		if i > 0 {
-			out += ","
-		}
-		out += signer
+	encoded, err := json.Marshal(signers)
+	if err != nil {
+		panic(err)
 	}
-	return out + "]"
+	return string(encoded)
 }
