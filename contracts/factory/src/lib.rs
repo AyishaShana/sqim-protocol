@@ -1,14 +1,65 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractclient, contractimpl, contracttype, symbol_short, Address, BytesN, Env,
-    String, Vec,
+    contract, contractclient, contracterror, contractevent, contractimpl, contracttype,
+    panic_with_error, Address, BytesN, Env, String, Vec,
 };
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[repr(u32)]
+pub enum Error {
+    AlreadyInitialized = 3001,
+    InvalidFee = 3002,
+    InvalidDrift = 3003,
+    InvalidTransactionLimit = 3004,
+    InvalidWeights = 3005,
+    InvalidQuorum = 3006,
+    DuplicateAddress = 3007,
+    NotInitialized = 3008,
+    BasketNotFound = 3009,
+    ArithmeticOverflow = 3010,
+}
 
 #[derive(Clone)]
 #[contracttype]
 pub struct Asset {
     pub address: Address,
+}
+
+#[derive(Clone)]
+#[contracttype]
+pub struct BasketConfig {
+    pub admin: Address,
+    pub name: String,
+    pub assets: Vec<Asset>,
+    pub target_weights_bps: Vec<u32>,
+    pub share_token: Address,
+    pub settlement: Address,
+    pub oracle: Address,
+    pub deposit_asset: Address,
+    pub withdrawal_fee_bps: u32,
+    pub rebalancers: Vec<Address>,
+    pub rebalancer_threshold: u32,
+    pub max_drift_bps: u32,
+    pub max_transaction_amount: i128,
+}
+
+#[derive(Clone)]
+#[contracttype]
+pub struct FactoryConfig {
+    pub admin: Address,
+    pub basket_wasm_hash: BytesN<32>,
+    pub token_wasm_hash: BytesN<32>,
+    pub settlement: Address,
+    pub oracle: Address,
+    pub deposit_asset: Address,
+    pub withdrawal_fee_bps: u32,
+    pub token_decimals: u32,
+    pub rebalancers: Vec<Address>,
+    pub rebalancer_threshold: u32,
+    pub max_drift_bps: u32,
+    pub max_transaction_amount: i128,
 }
 
 #[derive(Clone)]
@@ -22,24 +73,21 @@ pub struct BasketSpec {
     pub basket_token: Address,
 }
 
+#[contractevent(topics = ["basket_created"], data_format = "vec")]
+#[derive(Clone)]
+pub struct BasketCreatedEvent {
+    #[topic]
+    pub creator: Address,
+    pub basket: Address,
+    pub basket_token: Address,
+    pub name: String,
+    pub assets: Vec<Asset>,
+    pub target_weights_bps: Vec<u32>,
+}
+
 #[contractclient(name = "BasketClient")]
 pub trait BasketContract {
-    fn initialize(
-        env: Env,
-        admin: Address,
-        name: String,
-        assets: Vec<Asset>,
-        target_weights_bps: Vec<u32>,
-        share_token: Address,
-        settlement: Address,
-        oracle: Address,
-        deposit_asset: Address,
-        withdrawal_fee_bps: u32,
-        rebalancers: Vec<Address>,
-        rebalancer_threshold: u32,
-        max_drift_bps: u32,
-        max_transaction_amount: i128,
-    );
+    fn initialize(env: Env, config: BasketConfig);
 }
 
 #[contractclient(name = "BasketTokenClient")]
@@ -73,68 +121,57 @@ pub struct Factory;
 
 #[contractimpl]
 impl Factory {
-    pub fn initialize(
-        env: Env,
-        admin: Address,
-        basket_wasm_hash: BytesN<32>,
-        token_wasm_hash: BytesN<32>,
-        settlement: Address,
-        oracle: Address,
-        deposit_asset: Address,
-        withdrawal_fee_bps: u32,
-        token_decimals: u32,
-        rebalancers: Vec<Address>,
-        rebalancer_threshold: u32,
-        max_drift_bps: u32,
-        max_transaction_amount: i128,
-    ) {
+    pub fn initialize(env: Env, config: FactoryConfig) {
         if env.storage().instance().has(&DataKey::Initialized) {
-            panic!("factory already initialized");
+            panic_with_error!(&env, Error::AlreadyInitialized);
         }
-        if withdrawal_fee_bps > 10_000 {
-            panic!("basket withdrawal fee exceeds 100 percent");
+        if config.withdrawal_fee_bps > 10_000 {
+            panic_with_error!(&env, Error::InvalidFee);
         }
-        if max_drift_bps > 10_000 {
-            panic!("basket max drift exceeds 100 percent");
+        if config.max_drift_bps > 10_000 {
+            panic_with_error!(&env, Error::InvalidDrift);
         }
-        if max_transaction_amount < 0 {
-            panic!("basket max transaction amount must not be negative");
+        if config.max_transaction_amount < 0 {
+            panic_with_error!(&env, Error::InvalidTransactionLimit);
         }
-        validate_rebalancer_quorum(&rebalancers, rebalancer_threshold);
-        admin.require_auth();
+        validate_rebalancer_quorum(&env, &config.rebalancers, config.rebalancer_threshold);
+        config.admin.require_auth();
 
-        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Admin, &config.admin);
         env.storage()
             .instance()
-            .set(&DataKey::BasketWasmHash, &basket_wasm_hash);
+            .set(&DataKey::BasketWasmHash, &config.basket_wasm_hash);
         env.storage()
             .instance()
-            .set(&DataKey::TokenWasmHash, &token_wasm_hash);
+            .set(&DataKey::TokenWasmHash, &config.token_wasm_hash);
         env.storage()
             .instance()
-            .set(&DataKey::Settlement, &settlement);
-        env.storage().instance().set(&DataKey::Oracle, &oracle);
+            .set(&DataKey::Settlement, &config.settlement);
         env.storage()
             .instance()
-            .set(&DataKey::DepositAsset, &deposit_asset);
+            .set(&DataKey::Oracle, &config.oracle);
         env.storage()
             .instance()
-            .set(&DataKey::WithdrawalFeeBps, &withdrawal_fee_bps);
+            .set(&DataKey::DepositAsset, &config.deposit_asset);
         env.storage()
             .instance()
-            .set(&DataKey::TokenDecimals, &token_decimals);
+            .set(&DataKey::WithdrawalFeeBps, &config.withdrawal_fee_bps);
         env.storage()
             .instance()
-            .set(&DataKey::Rebalancers, &rebalancers);
+            .set(&DataKey::TokenDecimals, &config.token_decimals);
         env.storage()
             .instance()
-            .set(&DataKey::RebalancerThreshold, &rebalancer_threshold);
+            .set(&DataKey::Rebalancers, &config.rebalancers);
         env.storage()
             .instance()
-            .set(&DataKey::MaxDriftBps, &max_drift_bps);
+            .set(&DataKey::RebalancerThreshold, &config.rebalancer_threshold);
         env.storage()
             .instance()
-            .set(&DataKey::MaxTransactionAmount, &max_transaction_amount);
+            .set(&DataKey::MaxDriftBps, &config.max_drift_bps);
+        env.storage().instance().set(
+            &DataKey::MaxTransactionAmount,
+            &config.max_transaction_amount,
+        );
         env.storage().instance().set(&DataKey::BasketCount, &0_u32);
         env.storage().instance().set(&DataKey::Initialized, &true);
     }
@@ -147,19 +184,19 @@ impl Factory {
         target_weights_bps: Vec<u32>,
     ) -> Address {
         creator.require_auth();
-        validate_weights(&assets, &target_weights_bps);
+        validate_weights(&env, &assets, &target_weights_bps);
 
         let id = read_count(&env);
         let basket_wasm_hash: BytesN<32> = env
             .storage()
             .instance()
             .get(&DataKey::BasketWasmHash)
-            .unwrap();
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NotInitialized));
         let token_wasm_hash: BytesN<32> = env
             .storage()
             .instance()
             .get(&DataKey::TokenWasmHash)
-            .unwrap();
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NotInitialized));
 
         let basket = env
             .deployer()
@@ -177,34 +214,36 @@ impl Factory {
             &read_token_decimals(&env),
         );
 
-        BasketClient::new(&env, &basket).initialize(
-            &creator,
-            &name,
-            &assets,
-            &target_weights_bps,
-            &basket_token,
-            &read_settlement(&env),
-            &read_oracle(&env),
-            &read_deposit_asset(&env),
-            &read_withdrawal_fee_bps(&env),
-            &read_rebalancers(&env),
-            &read_rebalancer_threshold(&env),
-            &read_max_drift_bps(&env),
-            &read_max_transaction_amount(&env),
-        );
+        BasketClient::new(&env, &basket).initialize(&BasketConfig {
+            admin: creator.clone(),
+            name: name.clone(),
+            assets: assets.clone(),
+            target_weights_bps: target_weights_bps.clone(),
+            share_token: basket_token.clone(),
+            settlement: read_settlement(&env),
+            oracle: read_oracle(&env),
+            deposit_asset: read_deposit_asset(&env),
+            withdrawal_fee_bps: read_withdrawal_fee_bps(&env),
+            rebalancers: read_rebalancers(&env),
+            rebalancer_threshold: read_rebalancer_threshold(&env),
+            max_drift_bps: read_max_drift_bps(&env),
+            max_transaction_amount: read_max_transaction_amount(&env),
+        });
 
         let spec = BasketSpec {
             creator: creator.clone(),
-            name,
-            assets,
-            target_weights_bps,
+            name: name.clone(),
+            assets: assets.clone(),
+            target_weights_bps: target_weights_bps.clone(),
             basket: basket.clone(),
             basket_token: basket_token.clone(),
         };
         env.storage().persistent().set(&DataKey::Basket(id), &spec);
-        env.storage()
-            .persistent()
-            .set(&DataKey::BasketCount, &(id + 1));
+        env.storage().persistent().set(
+            &DataKey::BasketCount,
+            &id.checked_add(1)
+                .unwrap_or_else(|| panic_with_error!(&env, Error::ArithmeticOverflow)),
+        );
 
         let mut creator_baskets = Self::baskets_by_creator(env.clone(), creator.clone());
         creator_baskets.push_back(basket.clone());
@@ -212,10 +251,15 @@ impl Factory {
             .persistent()
             .set(&DataKey::CreatorBaskets(creator.clone()), &creator_baskets);
 
-        env.events().publish(
-            (symbol_short!("basket"), creator),
-            (basket.clone(), basket_token),
-        );
+        BasketCreatedEvent {
+            creator,
+            basket: basket.clone(),
+            basket_token,
+            name,
+            assets,
+            target_weights_bps,
+        }
+        .publish(&env);
         basket
     }
 
@@ -227,7 +271,7 @@ impl Factory {
         env.storage()
             .persistent()
             .get(&DataKey::Basket(id))
-            .unwrap()
+            .unwrap_or_else(|| panic_with_error!(&env, Error::BasketNotFound))
     }
 
     pub fn baskets_by_creator(env: Env, creator: Address) -> Vec<Address> {
@@ -247,47 +291,59 @@ fn read_count(env: &Env) -> u32 {
 }
 
 fn read_settlement(env: &Env) -> Address {
-    env.storage().instance().get(&DataKey::Settlement).unwrap()
+    env.storage()
+        .instance()
+        .get(&DataKey::Settlement)
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
 }
 
 fn read_oracle(env: &Env) -> Address {
-    env.storage().instance().get(&DataKey::Oracle).unwrap()
+    env.storage()
+        .instance()
+        .get(&DataKey::Oracle)
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
 }
 
 fn read_deposit_asset(env: &Env) -> Address {
     env.storage()
         .instance()
         .get(&DataKey::DepositAsset)
-        .unwrap()
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
 }
 
 fn read_withdrawal_fee_bps(env: &Env) -> u32 {
     env.storage()
         .instance()
         .get(&DataKey::WithdrawalFeeBps)
-        .unwrap()
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
 }
 
 fn read_token_decimals(env: &Env) -> u32 {
     env.storage()
         .instance()
         .get(&DataKey::TokenDecimals)
-        .unwrap()
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
 }
 
 fn read_rebalancers(env: &Env) -> Vec<Address> {
-    env.storage().instance().get(&DataKey::Rebalancers).unwrap()
+    env.storage()
+        .instance()
+        .get(&DataKey::Rebalancers)
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
 }
 
 fn read_rebalancer_threshold(env: &Env) -> u32 {
     env.storage()
         .instance()
         .get(&DataKey::RebalancerThreshold)
-        .unwrap()
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
 }
 
 fn read_max_drift_bps(env: &Env) -> u32 {
-    env.storage().instance().get(&DataKey::MaxDriftBps).unwrap()
+    env.storage()
+        .instance()
+        .get(&DataKey::MaxDriftBps)
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
 }
 
 fn read_max_transaction_amount(env: &Env) -> i128 {
@@ -297,33 +353,35 @@ fn read_max_transaction_amount(env: &Env) -> i128 {
         .unwrap_or(0)
 }
 
-fn validate_weights(assets: &Vec<Asset>, weights: &Vec<u32>) {
+fn validate_weights(env: &Env, assets: &Vec<Asset>, weights: &Vec<u32>) {
     if assets.is_empty() || assets.len() != weights.len() {
-        panic!("basket assets and weights mismatch");
+        panic_with_error!(env, Error::InvalidWeights);
     }
 
     let mut total = 0u32;
     for weight in weights.iter() {
-        total = total.checked_add(weight).unwrap();
+        total = total
+            .checked_add(weight)
+            .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow));
     }
     if total != 10_000 {
-        panic!("basket weights must total 10000 bps");
+        panic_with_error!(env, Error::InvalidWeights);
     }
 }
 
-fn validate_rebalancer_quorum(rebalancers: &Vec<Address>, threshold: u32) {
+fn validate_rebalancer_quorum(env: &Env, rebalancers: &Vec<Address>, threshold: u32) {
     if threshold > rebalancers.len() {
-        panic!("invalid rebalancer quorum");
+        panic_with_error!(env, Error::InvalidQuorum);
     }
-    assert_unique(rebalancers);
+    assert_unique(env, rebalancers);
 }
 
-fn assert_unique(addresses: &Vec<Address>) {
+fn assert_unique(env: &Env, addresses: &Vec<Address>) {
     for i in 0..addresses.len() {
         let left = addresses.get_unchecked(i);
         for j in (i + 1)..addresses.len() {
             if left == addresses.get_unchecked(j) {
-                panic!("duplicate address");
+                panic_with_error!(env, Error::DuplicateAddress);
             }
         }
     }
