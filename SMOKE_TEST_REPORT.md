@@ -2,7 +2,7 @@
 
 > **TESTNET ONLY. No mainnet configuration or real funds were used.**
 
-- Test date: 2026-07-18
+- Test date: 2026-07-18 through 2026-07-20
 - Active generation: [`DEPLOYMENTS.md`](DEPLOYMENTS.md)
 - Overall result: **PARTIAL**
 - Release verdict: **NOT READY**
@@ -22,7 +22,7 @@ This report supersedes earlier root reports. Previous evidence is archived under
 | Docker Compose stack | BLOCKED | Docker is not installed on this machine. |
 | Postgres integration run | BLOCKED | No integration database is running without Docker. |
 | Public API/indexer/relayer | BLOCKED | No production hosting target or credentials were supplied for the Go stack. |
-| Push and CI | BLOCKED | GitHub CLI is not authenticated. |
+| Push and CI | PASS | Pushed as Ayisha; all four jobs passed without annotations in [Actions run 29717367088](https://github.com/AyishaShana/sqim-protocol/actions/runs/29717367088). |
 
 ## Active readback
 
@@ -108,4 +108,4 @@ The requested hostname `sqim-protocol-stellar.vercel.app` could not be assigned 
 
 ## Final status
 
-**Testnet production deployment: NOT READY, blocked on real Freighter evidence, Docker Compose and Postgres integration evidence, public API/indexer/relayer hosting, complete durable oracle-control hashes, GitHub push/CI, and an external professional audit before any mainnet consideration.**
+**Testnet production deployment: NOT READY, blocked on real Freighter evidence, Docker Compose and Postgres integration evidence, public API/indexer/relayer hosting, preferred-domain ownership, durable email delivery, complete oracle-control transaction evidence, and an external professional audit before any mainnet consideration.**

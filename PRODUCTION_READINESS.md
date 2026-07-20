@@ -12,6 +12,7 @@
 - The public frontend reads the active generation, fails closed on deployment drift, and persistently labels every route TESTNET ONLY.
 - Historical simulations are visibly separate from live on-chain history; algorithmic suggestions explicitly state that they are mechanical output, not advice.
 - NAV and AUM API responses carry ledger and timestamp freshness metadata.
+- GitHub `main` is pushed under the Ayisha account, and contracts, services, application, and fixture-guard jobs passed without annotations in [Actions run 29717367088](https://github.com/AyishaShana/sqim-protocol/actions/runs/29717367088).
 
 See [`SMOKE_TEST_REPORT.md`](SMOKE_TEST_REPORT.md) for exact hashes and rejection output.
 
@@ -22,7 +23,6 @@ See [`SMOKE_TEST_REPORT.md`](SMOKE_TEST_REPORT.md) for exact hashes and rejectio
 - Indexer, API, Redis, and relayer are not deployed to a public service host.
 - The preferred Vercel alias is owned by another project; the verified build currently uses the available project alias.
 - Waitlist/profile email preferences are durably stored only when Postgres is deployed; outbound email delivery is not implemented.
-- GitHub CLI authentication, push, and CI confirmation are pending.
 - The contracts have not received an independent professional audit.
 - Mainnet deployment and mainnet configuration remain deliberately untouched.
 
@@ -32,4 +32,4 @@ Sqim holds user-directed assets and makes oracle-dependent cross-contract swaps.
 
 ## Status
 
-**Testnet production deployment: NOT READY, blocked on real Freighter public-flow evidence, Docker/Postgres integration evidence, public backend hosting, intended-domain ownership, GitHub push/CI, and independent audit.**
+**Testnet production deployment: NOT READY, blocked on real Freighter public-flow evidence, Docker/Postgres integration evidence, public backend hosting, intended-domain ownership, durable email delivery, complete oracle-control evidence, and independent audit.**

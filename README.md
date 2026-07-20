@@ -19,7 +19,7 @@ Sqim is a permissionless Stellar protocol for diversified on-chain asset baskets
 
 ## Status
 
-**Testnet production deployment: NOT READY.** The contracts and public read-only application are live, but real Freighter browser evidence, Docker/Postgres integration evidence, public backend hosting, GitHub CI confirmation, and an independent audit remain open. The exact blockers are maintained in [`PRODUCTION_READINESS.md`](PRODUCTION_READINESS.md).
+**Testnet production deployment: NOT READY.** The contracts, public read-only application, and CI are live, but real Freighter browser evidence, Docker/Postgres integration evidence, public backend hosting, preferred-domain ownership, and an independent audit remain open. The exact blockers are maintained in [`PRODUCTION_READINESS.md`](PRODUCTION_READINESS.md).
 
 ## What is implemented
 
@@ -240,7 +240,6 @@ Both scripts are designed for clean-checkout use. The contract script rejects an
 - Docker Compose and integration-test evidence on a Docker-capable machine.
 - Durable outbound email provider for waitlist and drift notifications.
 - Intended production-domain ownership and routing.
-- GitHub push and green CI on the final state.
 - Independent professional contract audit.
 - Mainnet checklist and cutover, deliberately out of scope.
 
